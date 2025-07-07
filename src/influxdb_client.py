@@ -412,6 +412,11 @@ class InfluxDBClient:
         """
         Obtiene el último timestamp de un campo específico.
 
+        Utiliza múltiples estrategias para asegurar la detección correcta:
+        1. Consulta directa sin filtros (más robusta)
+        2. Fallback con filtro IS NOT NULL si la primera falla
+        3. Fallback con COUNT para verificar existencia de datos
+
         Args:
             database: Nombre de la base de datos
             measurement: Nombre de la medición
@@ -424,7 +429,9 @@ class InfluxDBClient:
             escaped_measurement = escape_influxdb_identifier(measurement)
             escaped_field = escape_influxdb_identifier(field)
 
-            query = f"SELECT {escaped_field} FROM {escaped_measurement} WHERE {escaped_field} IS NOT NULL ORDER BY time DESC LIMIT 1"
+            # Estrategia 1: Consulta directa sin filtros (más robusta)
+            # Esta es la más confiable porque no depende de valores NULL
+            query = f"SELECT {escaped_field} FROM {escaped_measurement} ORDER BY time DESC LIMIT 1"
 
             result = self._execute_query(query, database, epoch='ns')
 
@@ -432,7 +439,37 @@ class InfluxDBClient:
                 series = result['results'][0].get('series', [])
                 if series and series[0].get('values'):
                     timestamp_ns = series[0]['values'][0][0]
-                    return datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+                    timestamp = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+                    self.logger.debug(f"Found last timestamp for field {field}: {timestamp} (strategy 1)")
+                    return timestamp
+
+            # Estrategia 2: Fallback con filtro IS NOT NULL
+            self.logger.debug(f"Strategy 1 failed for field {field}, trying strategy 2 with IS NOT NULL filter")
+            query_with_filter = f"SELECT {escaped_field} FROM {escaped_measurement} WHERE {escaped_field} IS NOT NULL ORDER BY time DESC LIMIT 1"
+
+            result = self._execute_query(query_with_filter, database, epoch='ns')
+
+            if 'results' in result and result['results']:
+                series = result['results'][0].get('series', [])
+                if series and series[0].get('values'):
+                    timestamp_ns = series[0]['values'][0][0]
+                    timestamp = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+                    self.logger.debug(f"Found last timestamp for field {field}: {timestamp} (strategy 2)")
+                    return timestamp
+
+            # Estrategia 3: Verificar si hay datos usando COUNT
+            self.logger.debug(f"Strategy 2 failed for field {field}, checking if any data exists with COUNT")
+            count_query = f"SELECT COUNT({escaped_field}) FROM {escaped_measurement}"
+            count_result = self._execute_query(count_query, database)
+
+            if 'results' in count_result and count_result['results']:
+                series = count_result['results'][0].get('series', [])
+                if series and series[0].get('values'):
+                    count = series[0]['values'][0][1]
+                    if count > 0:
+                        self.logger.debug(f"Field {field} has {count} records but timestamp detection failed")
+                    else:
+                        self.logger.debug(f"Field {field} has no records")
 
             return None
 

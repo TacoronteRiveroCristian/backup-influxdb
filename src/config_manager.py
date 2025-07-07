@@ -148,6 +148,7 @@ class ConfigManager:
                     "retries": And(int, lambda x: x >= 0),
                     "retry_delay": And(Or(int, float), lambda x: x >= 0),
                     "days_of_pagination": And(int, lambda x: x > 0),
+                    "parallel_workers": And(int, lambda x: x > 0),
                     "field_obsolete_threshold": str,
                     "initial_connection_retry_delay": And(
                         Or(int, float), lambda x: x >= 0
@@ -388,6 +389,10 @@ class ConfigManager:
     def get_days_of_pagination(self) -> int:
         """Retorna los días de paginación."""
         return self.get_options_config()["days_of_pagination"]
+
+    def get_parallel_workers(self) -> int:
+        """Retorna el número de workers paralelos."""
+        return self.get_options_config()["parallel_workers"]
 
     def get_field_obsolete_threshold(self) -> str:
         """Retorna el umbral de campos obsoletos."""

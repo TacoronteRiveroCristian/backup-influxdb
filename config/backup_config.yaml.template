@@ -1,246 +1,551 @@
-# InfluxDB Backup Configuration
-# -------------------------
-# Este archivo contiene TODA la configuración para el servicio de backup de InfluxDB.
-# Copia este archivo a backup_config.yaml y personalízalo según tus necesidades.
+# =====================================================================================
+# PLANTILLA DE CONFIGURACIÓN - SISTEMA DE BACKUP INFLUXDB
+# =====================================================================================
+# Sistema de Backup Campo por Campo con Paralelización Configurable
+#
+# CARACTERÍSTICAS PRINCIPALES:
+# ✅ Procesamiento campo por campo independiente
+# ✅ Paralelización configurable (1-16+ workers)
+# ✅ Prevención de contaminación cruzada
+# ✅ Timestamps específicos por campo
+# ✅ Thread-safe logging con identificadores únicos
+# ✅ Métricas de eficiencia en tiempo real
+#
+# INSTRUCCIONES DE USO:
+# 1. Copia este archivo: cp backup_config.yaml.template mi_backup.yaml
+# 2. Personaliza la configuración según tus necesidades
+# 3. Valida la configuración: python main.py --validate-only
+# 4. Ejecuta el backup: python main.py --config /config
+#
+# DOCUMENTACIÓN COMPLETA: README.md
+# =====================================================================================
 
-# Configuración global
+# ===================================
+# CONFIGURACIÓN GLOBAL DEL SISTEMA
+# ===================================
 global:
-  # Red Docker para contenedores
-  # Ejemplo: 'influxdb_network' - Debe coincidir con la red donde están los contenedores de InfluxDB
-  # Si los contenedores están en diferentes redes, crea una red compartida con:
+  # Red Docker para comunicación entre contenedores
+  # IMPORTANTE: Todos los contenedores InfluxDB deben estar en esta red
+  #
+  # Para crear una red compartida:
   # docker network create influxdb_network
+  #
+  # Para conectar contenedores existentes:
+  # docker network connect influxdb_network nombre_contenedor
   network: influxdb_network
 
-# Configuración InfluxDB origen
+# ========================================
+# CONFIGURACIÓN SERVIDOR INFLUXDB ORIGEN
+# ========================================
 source:
-  # URL del servidor InfluxDB origen (requerido)
-  # Formato: http://hostname:puerto o https://hostname:puerto
-  # Ejemplo: 'http://source-influxdb:8086' para contenedor Docker
-  # Ejemplo: 'http://192.168.1.100:8086' para servidor remoto
+  # URL del servidor InfluxDB de origen (OBLIGATORIO)
+  #
+  # FORMATOS VÁLIDOS:
+  # - Contenedor Docker: http://nombre-contenedor:8086
+  # - Servidor local: http://localhost:8086
+  # - Servidor remoto: http://192.168.1.100:8086
+  # - Con SSL: https://mi-servidor.com:8086
+  #
+  # EJEMPLOS:
+  # url: http://sysadmintoolkit-influxdb-dev:8086    # Contenedor Docker
+  # url: http://influxdb-production:8086             # Servidor producción
+  # url: https://metrics.empresa.com:8086            # Servidor externo con SSL
   url: http://source-influxdb:8086
 
-  # Habilitar SSL/TLS para la conexión de origen
-  # Poner a 'true' si la URL empieza por https://
-  ssl: false
-  # Verificar el certificado SSL del servidor de origen.
-  # Recomendado 'true' en producción, 'false' para certificados autofirmados.
-  verify_ssl: true
+  # Configuración SSL/TLS
+  ssl: false                    # true si usas HTTPS
+  verify_ssl: true             # false para certificados autofirmados
 
-  # Lista de bases de datos a respaldar.
-  # Si esta lista se deja vacía (databases: []), se respaldarán TODAS las bases de datos del servidor origen.
-  # Cada entrada debe tener:
-  #   - name: Nombre de la base de datos en el origen.
-  #   - destination: Nombre que tendrá en el destino (puede ser el mismo).
+  # ========================================
+  # CONFIGURACIÓN DE BASES DE DATOS
+  # ========================================
   #
-  # Ejemplo (respaldar solo bases de datos específicas del servidor InfluxDB de origen):
-  # databases:
-  #   - name: telegraf
-  #     destination: telegraf
-  #   - name: database_2
-  #     destination: database_2_backup
-  #
-  # Ejemplo (respaldar TODAS las bases de datos del servidor InfluxDB de origen):
-  # databases: []
+  # OPCIÓN 1: Respaldar bases de datos específicas
+  # Especifica exactamente qué bases de datos respaldar
   databases:
-    - name: metrics
-      destination: metrics_backup
+    - name: metrics             # Nombre en el servidor origen
+      destination: metrics_backup  # Nombre en el servidor destino
     - name: telegraf
       destination: telegraf_backup
+    - name: weather_data
+      destination: weather_data_backup
 
-  # Prefijo y sufijo opcionales para los nombres de las bases de datos en el destino.
-  # Útil para diferenciar las bases de datos respaldadas.
-  # - Si 'databases' no está vacía, se aplica sobre el campo 'destination'.
-  #   Ej: prefix: 'bkp_', destination: 'metrics'  => bkp_metrics
-  # - Si 'databases' está vacía, se aplica sobre el nombre original de la BBDD.
-  #   Ej: suffix: '_bkp', BBDD origen: 'telegraf' => telegraf_bkp
-  # Dejar en blanco para no usar.
+  # OPCIÓN 2: Respaldar TODAS las bases de datos
+  # Descomenta esta línea para respaldar todas las BD automáticamente:
+  # databases: []
+
+  # ========================================
+  # PREFIJOS Y SUFIJOS PARA NOMBRES
+  # ========================================
+  # Útil para identificar bases de datos respaldadas
+  #
+  # EJEMPLOS:
+  # prefix: "backup_"    → metrics se convierte en backup_metrics
+  # suffix: "_bkp"       → metrics se convierte en metrics_bkp
+  # prefix: "prod_", suffix: "_v2" → metrics se convierte en prod_metrics_v2
   prefix: ""
   suffix: ""
 
-  # Autenticación (si es necesaria)
-  # Deja en blanco si no se requiere autenticación
-  # Para InfluxDB con autenticación habilitada:
+  # ========================================
+  # AUTENTICACIÓN (Opcional)
+  # ========================================
+  # Deja en blanco si InfluxDB no requiere autenticación
+  #
+  # EJEMPLO CON AUTENTICACIÓN:
   # user: "admin"
-  # password: "password123"
+  # password: "mi_password_seguro_123"
   user: ""
   password: ""
 
-  # Periodo de tiempo para agrupar datos en consultas
-  # Valores comunes: 30s, 1m, 5m, 1h
-  # Valores más pequeños reducen el uso de memoria pero aumentan el número de consultas
-  # Valores más grandes son más rápidos pero consumen más memoria
-  # Para NO usar agrupamiento, puedes:
-  # - Dejarlo completamente vacío: group_by:
-  # - O usar comillas vacías: group_by: ""
-  # NOTA: La paginación (para conjuntos grandes de datos) REQUIERE un valor válido.
-  # Si los datos abarcan más días que 'days_of_pagination', debes especificar un valor.
+  # ========================================
+  # AGRUPAMIENTO DE CONSULTAS
+  # ========================================
+  # Controla cómo se agrupan los datos en las consultas
+  #
+  # VALORES COMUNES:
+  # - "30s": Agrupa datos cada 30 segundos (más consultas, menos memoria)
+  # - "1m":  Agrupa datos cada minuto (balance)
+  # - "5m":  Agrupa datos cada 5 minutos (menos consultas, más memoria)
+  # - "1h":  Agrupa datos cada hora (para datos históricos grandes)
+  # - "":    Sin agrupamiento (para datasets pequeños)
+  #
+  # RECOMENDACIONES:
+  # - Datos en tiempo real: "30s" o "1m"
+  # - Backups históricos: "5m" o "1h"
+  # - Datasets pequeños: "" (sin agrupamiento)
   group_by: ""
 
-# Configuración InfluxDB destino
+# =========================================
+# CONFIGURACIÓN SERVIDOR INFLUXDB DESTINO
+# =========================================
 destination:
-  # URL del servidor InfluxDB destino (requerido)
-  # Formato: http://hostname:puerto
-  # Puede ser el mismo servidor que el origen (usando otra base de datos)
-  # o un servidor completamente diferente
+  # URL del servidor InfluxDB de destino (OBLIGATORIO)
+  # Puede ser el mismo servidor que el origen (usando diferentes BD)
+  #
+  # EJEMPLOS:
+  # url: http://backup-influxdb:8086           # Servidor dedicado para backups
+  # url: http://sysadmintoolkit-influxdb-dev:8086  # Mismo servidor, diferentes BD
+  # url: http://192.168.1.200:8086            # Servidor de backup remoto
   url: http://destination-influxdb:8086
 
-  # Habilitar SSL/TLS para la conexión de destino
+  # Configuración SSL/TLS
   ssl: false
-  # Verificar el certificado SSL del servidor de destino
   verify_ssl: true
 
-  # Autenticación (si es necesaria)
-  # Configura según los requisitos del servidor destino
+  # Autenticación para el servidor destino (puede ser diferente al origen)
   user: ""
   password: ""
 
-# Configuración de filtrado de mediciones
+# =============================================
+# CONFIGURACIÓN DE FILTRADO DE MEDICIONES
+# =============================================
 measurements:
-  # Listas globales de inclusión/exclusión para mediciones
-  # Hay dos formas de usar estas listas:
-
-  # OPCIÓN 1: Incluir mediciones específicas
-  # Si 'include' tiene elementos, SOLO esas mediciones serán respaldadas
-  # En este caso, 'exclude' es ignorado y no es necesario configurarlo
-  # Ejemplo: include: [cpu, memory, disk] - Solo respaldar estas 3 mediciones
+  # ========================================
+  # FILTRADO GLOBAL DE MEDICIONES
+  # ========================================
+  #
+  # OPCIÓN 1: Incluir mediciones específicas (RECOMENDADO)
+  # Solo las mediciones listadas serán respaldadas
+  include: []
+  # EJEMPLO: include: [cpu, memory, disk, network]
 
   # OPCIÓN 2: Excluir mediciones específicas
-  # Si 'include' está vacío, TODAS las mediciones serán respaldadas EXCEPTO
-  # las que estén en la lista 'exclude'
-  # Ejemplo: include: [] y exclude: [windows_services, logs]
-  # Útil cuando tienes muchas mediciones y solo quieres excluir algunas pocas
-
-  # Lista de mediciones a incluir (vacío = incluir todas excepto las excluidas)
-  include: []
-
-  # Lista de mediciones a excluir (solo se aplica si 'include' está vacío)
+  # Todas las mediciones EXCEPTO las listadas serán respaldadas
   exclude: []
+  # EJEMPLO: exclude: [debug_logs, temp_data, test_metrics]
+  #
+  # NOTA: No uses 'include' y 'exclude' al mismo tiempo
 
-  # Configuraciones específicas por medición
-  # Estas sobrescriben la configuración global para mediciones individuales
-  # NOTA: Si borras toda esta sección 'specific' o la dejas vacía (specific: {}),
-  # el sistema respaldará TODAS las mediciones según las reglas de include/exclude globales
-  # y respaldará TODOS los campos de cada medición sin filtrar.
+  # ========================================
+  # CONFIGURACIONES ESPECÍFICAS POR MEDICIÓN
+  # ========================================
+  # Aquí defines el procesamiento detallado para cada medición
+  # ¡ESTA ES LA CLAVE DEL SISTEMA CAMPO POR CAMPO!
   specific:
-    # Ejemplo: Configuración medición CPU - Sólo campos específicos
+    # ========================================
+    # EJEMPLO 1: PROCESAMIENTO DE MÉTRICAS CPU
+    # ========================================
+    # Scenario: Quieres solo métricas de uso de CPU, no todas las métricas
     cpu:
       fields:
-        # Campos a incluir (vacío significa todos)
-        # Ejemplo práctico: Solo nos interesan los datos de uso, no métricas detalladas
-        include: [usage_user, usage_system, usage_idle]
-        # Campos a excluir (aplicado después de incluir)
+        # Incluir solo campos específicos de CPU
+        include: [usage_user, usage_system, usage_idle, usage_iowait]
+        # Excluir campos que no necesitas
         exclude: []
-        # Tipos a incluir: 'numeric', 'string', 'boolean'
-        # Aquí aceptamos cualquier tipo de datos para estos campos
+        # Tipos de datos a procesar
         types: [numeric, string, boolean]
 
-    # Ejemplo: Configuración medición Memory - Excluir campos específicos
+    # ========================================
+    # EJEMPLO 2: PROCESAMIENTO DE MEMORIA
+    # ========================================
+    # Scenario: Quieres toda la memoria EXCEPTO campos de cache
     memory:
       fields:
-        # Incluir todos los campos (lista vacía)
-        include: []
-        # Excluir campos específicos (por ejemplo, campos que no son relevantes)
-        # Ejemplo práctico: No queremos datos de buffer/cache que cambian constantemente
-        exclude: [buffer, cached]
-        # Solo datos numéricos y cadenas
+        include: []  # Todos los campos
+        # Excluir campos de cache que cambian constantemente
+        exclude: [buffer, cached, slab]
         types: [numeric, string]
 
-    # Ejemplo: Configuración medición Disk - Solo datos numéricos
-    disk:
+    # ========================================
+    # EJEMPLO 3: DATOS METEOROLÓGICOS ESPECÍFICOS
+    # ========================================
+    # Scenario: Solo un campo específico de una medición grande
+    ForecastingWeather:
       fields:
-        # Ejemplo práctico: Solo nos interesan métricas numéricas para discos
-        # Ignoramos etiquetas y valores booleanos
+        # CAMPO POR CAMPO: Solo procesar temperatura
+        include: [WRF_continuous_Temperature_2m_degC]
+        exclude: []
+        types: [numeric, string, boolean]
+
+    # ========================================
+    # EJEMPLO 4: MÚLTIPLES CAMPOS EN PARALELO
+    # ========================================
+    # Scenario: Varios campos de la misma medición procesados en paralelo
+    WeatherStation:
+      fields:
+        # Múltiples campos que se procesarán independientemente
+        include: [
+          temperature,      # Thread T01
+          humidity,         # Thread T02
+          pressure,         # Thread T03
+          wind_speed,       # Thread T04
+          wind_direction,   # Thread T05
+          rainfall,         # Thread T06
+          solar_radiation,  # Thread T07
+          uv_index         # Thread T08
+        ]
+        exclude: []
         types: [numeric]
 
-# Opciones de backup
+    # ========================================
+    # EJEMPLO 5: FILTRADO POR TIPO DE DATO
+    # ========================================
+    # Scenario: Solo quieres datos numéricos, no strings ni booleanos
+    sensor_data:
+      fields:
+        include: []  # Todos los campos
+        exclude: []
+        types: [numeric]  # Solo datos numéricos
+
+    # ========================================
+    # EJEMPLO 6: LOGS Y EVENTOS
+    # ========================================
+    # Scenario: Procesar logs con datos de texto
+    application_logs:
+      fields:
+        include: [level, message, timestamp, source]
+        exclude: [debug_info, stack_trace]
+        types: [string, boolean]  # Solo texto y flags
+
+# =============================================
+# OPCIONES DE BACKUP Y PARALELIZACIÓN
+# =============================================
 options:
-  # Modo de backup: 'incremental' o 'range'.
-  # - 'incremental': Copia datos nuevos desde la última marca de tiempo encontrada en el destino.
-  #                  Diseñado para ejecuciones periódicas (usando 'schedule').
-  # - 'range': Copia datos para un rango de fechas específico en una sola ejecución.
-  #            El script se detendrá después de completar el backup.
+  # ========================================
+  # MODO DE BACKUP
+  # ========================================
+  #
+  # INCREMENTAL: Copia solo datos nuevos desde la última ejecución
+  # - Ideal para: Backups continuos, datos en tiempo real
+  # - Usa: Timestamps específicos por campo para evitar contaminación
+  # - Ejecuta: Según schedule configurado
+  #
+  # RANGE: Copia datos de un período específico
+  # - Ideal para: Backups históricos, migraciones de datos
+  # - Usa: Fechas fijas de inicio y fin
+  # - Ejecuta: Una sola vez y termina
   backup_mode: incremental
 
-  # --- Configuración para modo 'range' (backup de un periodo específico) ---
-  # Se utiliza solo si backup_mode es 'range'. El script se ejecuta una vez y termina.
+  # ========================================
+  # CONFIGURACIÓN MODO RANGE
+  # ========================================
+  # Solo se usa si backup_mode = "range"
   range:
-    # Fecha de inicio del backup (formato ISO 8601: YYYY-MM-DDTHH:MM:SSZ). Requerido.
-    start_date: ""
-    # Fecha de fin del backup (formato ISO 8601: YYYY-MM-DDTHH:MM:SSZ). Requerido.
-    end_date: ""
+    # Fechas en formato ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
+    #
+    # EJEMPLOS:
+    # start_date: "2023-01-01T00:00:00Z"    # Año completo
+    # end_date: "2023-12-31T23:59:59Z"
+    #
+    # start_date: "2023-12-01T08:00:00Z"    # Un día específico
+    # end_date: "2023-12-01T20:00:00Z"
+    start_date: "2023-01-01T00:00:00Z"
+    end_date: "2023-12-31T23:59:59Z"
 
-  # --- Configuración para modo 'incremental' (backup continuo) ---
-  # Se utiliza solo si backup_mode es 'incremental'.
+  # ========================================
+  # CONFIGURACIÓN MODO INCREMENTAL
+  # ========================================
+  # Solo se usa si backup_mode = "incremental"
   incremental:
-    # Expresión cron para backups programados.
-    # Si se deja vacío, se ejecutará una sola vez en modo incremental.
-    # Ejemplos: "0 0 * * *" (diario), "0 */6 * * *" (cada 6 horas).
+    # Expresión CRON para programar ejecuciones automáticas
+    # Deja vacío para ejecutar solo una vez
+    #
+    # EJEMPLOS DE EXPRESIONES CRON:
+    # "* * * * *"        # Cada minuto (para testing)
+    # "*/5 * * * *"      # Cada 5 minutos
+    # "0 * * * *"        # Cada hora
+    # "0 */6 * * *"      # Cada 6 horas
+    # "0 0 * * *"        # Diario a medianoche
+    # "0 2 * * 0"        # Semanal los domingos a las 2 AM
+    # "0 1 1 * *"        # Mensual el día 1 a la 1 AM
+    #
+    # FORMATO: "minuto hora día_mes mes día_semana"
     schedule: ""
 
-  # --- Opciones generales (aplicables a ambos modos) ---
-  # Timeout del cliente en segundos para conexiones HTTP.
-  timeout_client: 20
+  # ========================================
+  # CONFIGURACIÓN DE CONEXIONES
+  # ========================================
+  # Timeouts y reintentos para conexiones de red
+  timeout_client: 20                    # Timeout por consulta (segundos)
+  retries: 3                           # Reintentos en caso de error
+  retry_delay: 5                       # Espera entre reintentos (segundos)
+  initial_connection_retry_delay: 60   # Espera para reconectar al inicio
 
-  # Número de reintentos si una consulta o escritura falla por un error de red.
-  # Poner a 0 para deshabilitar los reintentos.
-  retries: 3
-
-  # Segundos de espera entre cada reintento.
-  retry_delay: 5
-
-  # Días para dividir las consultas grandes y evitar problemas de memoria.
-  # Un valor más pequeño (ej. 1) es más seguro para BBDD muy grandes, pero más lento.
-  # Un valor mayor (ej. 30) es más rápido pero consume más memoria.
+  # ========================================
+  # CONFIGURACIÓN DE PAGINACIÓN
+  # ========================================
+  # Divide consultas grandes en chunks para evitar problemas de memoria
+  #
+  # VALORES RECOMENDADOS:
+  # - 1 día: Para bases de datos muy grandes (>100GB)
+  # - 7 días: Para bases de datos medianas (10-100GB)
+  # - 30 días: Para bases de datos pequeñas (<10GB)
   days_of_pagination: 7
 
-  # Umbral para considerar un campo obsoleto. Si el último dato de un campo específico
-  # en el destino es más antiguo que este umbral, dicho campo se ignorará en el backup.
-  # Esto evita consultas innecesarias para campos que ya no reciben datos.
-  # Unidades válidas: s, m, h, d, w, M (meses), y (años). Ejemplo: "6M" para 6 meses.
-  # Dejar vacío "" para deshabilitar esta comprobación.
+  # =========================================
+  # CONFIGURACIÓN DE PARALELIZACIÓN
+  # =========================================
+  # ¡NUEVA FUNCIONALIDAD PRINCIPAL!
+  # Número de hilos para procesar campos en paralelo
+  #
+  # CÓMO FUNCIONA:
+  # - Cada campo se procesa en su propio hilo independiente
+  # - Timestamps específicos por campo (NO contaminación cruzada)
+  # - ThreadPoolExecutor gestiona la concurrencia
+  # - Logging con identificadores únicos por thread ([T01], [T02], etc.)
+  #
+  # GUÍA DE CONFIGURACIÓN:
+  #
+  # ┌─────────────────┬──────────────────┬─────────────────────────────────┐
+  # │ CAMPOS A BACKUP │ PARALLEL_WORKERS │ DESCRIPCIÓN                     │
+  # ├─────────────────┼──────────────────┼─────────────────────────────────┤
+  # │ 1 campo         │ 1                │ Secuencial (máxima seguridad)   │
+  # │ 2-4 campos      │ 2-4              │ Paralelismo completo            │
+  # │ 5-8 campos      │ 4-6              │ Balance rendimiento/recursos    │
+  # │ 9+ campos       │ 6-8              │ Alto rendimiento                │
+  # │ Servidor potente│ 8-16             │ Máximo paralelismo              │
+  # └─────────────────┴──────────────────┴─────────────────────────────────┘
+  #
+  # EJEMPLOS POR ESCENARIO:
+  #
+  # EJEMPLO A: Un solo campo crítico
+  # parallel_workers: 1
+  # measurements.specific.CriticalSensor.fields.include: [sensor_reading]
+  #
+  # EJEMPLO B: Estación meteorológica (8 sensores)
+  # parallel_workers: 8
+  # measurements.specific.Weather.fields.include: [temp, humidity, pressure, ...]
+  #
+  # EJEMPLO C: Múltiples mediciones con pocos campos cada una
+  # parallel_workers: 4  # Balance general
+  #
+  # IMPORTANTE:
+  # - No exceder número de CPU cores disponibles
+  # - Monitorear uso de memoria con parallel_workers alto
+  # - Para testing inicial usar parallel_workers: 1
+  parallel_workers: 4
+
+  # ========================================
+  # GESTIÓN DE CAMPOS OBSOLETOS
+  # ========================================
+  # Evita procesar campos que ya no reciben datos nuevos
+  #
+  # FORMATO: número + unidad (s, m, h, d, w, M, y)
+  # EJEMPLOS:
+  # "30d"  - Ignorar campos sin datos en 30 días
+  # "6M"   - Ignorar campos sin datos en 6 meses
+  # "1y"   - Ignorar campos sin datos en 1 año
+  # ""     - No filtrar por obsolescencia (procesar todo)
+  #
+  # RECOMENDADO: "6M" para la mayoría de casos
   field_obsolete_threshold: "6M"
 
-  # Segundos de espera antes de reintentar una conexión fallida al iniciar.
-  # Si el script no puede conectar con InfluxDB al arrancar, esperará este tiempo
-  # antes de volver a intentarlo. Esto se aplica a la conexión inicial.
-  initial_connection_retry_delay: 60
-
-  # --- Configuración de Logs ---
-  # Directorio para los archivos de log dentro del contenedor.
-  # El sistema creará automáticamente un subdirectorio con el nombre del fichero de configuración.
-  # Ejemplo: /var/log/backup_influxdb/ y dentro de este directorio se creará otro directorio con el
-  # nombre del archivo de configuración .yaml donde se encontrarán todos los .log rotando
+  # ========================================
+  # CONFIGURACIÓN DE LOGGING
+  # ========================================
   log_directory: /var/log/backup_influxdb/
 
-  # Configuración de rotación de logs
-  # Permite rotar los archivos de log basados en tiempo para no ocupar todo el disco.
+  # Rotación automática de logs
   log_rotation:
-    # Habilitar o deshabilitar la rotación de logs.
     enabled: true
-    # Cuándo rotar. 'D' para diario, 'H' para por hora, 'M' para por minuto.
-    # Ver la documentación de TimedRotatingFileHandler de Python para más opciones.
-    when: 'D'
-    # Con qué frecuencia rotar, basado en la unidad de 'when'. 1 = cada día/hora/minuto.
-    interval: 1
-    # Cuántos archivos de log antiguos mantener.
-    backup_count: 5
+    when: 'D'        # D=diario, H=por hora, M=por minuto
+    interval: 1      # Cada cuánto rotar (1 día)
+    backup_count: 7  # Mantener 7 archivos históricos
 
-  # Configuración para enviar logs a Loki
+  # Configuración Loki (logging centralizado)
   loki:
-    # Habilitar o deshabilitar el envío de logs a Loki.
-    enabled: false
-    # URL del servidor Loki (sin http:// ni el puerto).
-    url: "loki"
-    # Puerto del servidor Loki.
+    enabled: true
+    url: "sysadmintoolkit-loki-dev"  # Servidor Loki
     port: 3100
-    # Etiquetas (tags) que se añadirán a todos los logs enviados a Loki.
-    # Es útil para filtrar en Grafana/Loki.
-    # Se añadirá automáticamente la etiqueta 'config_name' con el nombre del fichero .yaml.
+    # IMPORTANTE: Usar tags únicos para distinguir configuraciones
     tags:
-      app: "influxdb_backup"
+      app: "influxdb-backup"
       environment: "production"
+      config: "mi_backup.yaml"  # ¡CAMBIAR POR NOMBRE REAL DEL ARCHIVO!
 
-  # Nivel de log: DEBUG, INFO, WARNING, ERROR, CRITICAL
-  # DEBUG: muy detallado.
-  # INFO: recomendado para operación normal.
+  # Nivel de detalle de logs
+  # DEBUG: Muy detallado (para desarrollo)
+  # INFO: Normal (recomendado para producción)
+  # WARNING: Solo advertencias y errores
+  # ERROR: Solo errores críticos
   log_level: INFO
+
+# =============================================
+# EJEMPLOS DE CONFIGURACIONES COMPLETAS
+# =============================================
+
+# ========================================
+# CONFIGURACIÓN TIPO A: CAMPO ÚNICO CRÍTICO
+# ========================================
+# Use case: Backup de un sensor crítico específico
+#
+# measurements:
+#   include: [CriticalSensors]
+#   specific:
+#     CriticalSensors:
+#       fields:
+#         include: [reactor_temperature]  # Solo temperatura del reactor
+#
+# options:
+#   backup_mode: incremental
+#   parallel_workers: 1                  # Secuencial para máxima seguridad
+#   incremental:
+#     schedule: "* * * * *"               # Cada minuto
+#   field_obsolete_threshold: ""         # No filtrar por obsolescencia
+
+# ========================================
+# CONFIGURACIÓN TIPO B: ESTACIÓN METEOROLÓGICA
+# ========================================
+# Use case: Múltiples sensores independientes
+#
+# measurements:
+#   include: [WeatherStation]
+#   specific:
+#     WeatherStation:
+#       fields:
+#         include: [
+#           temperature,     # T01
+#           humidity,        # T02
+#           pressure,        # T03
+#           wind_speed,      # T04
+#           wind_direction,  # T05
+#           rainfall,        # T06
+#           uv_index,        # T07
+#           solar_radiation  # T08
+#         ]
+#
+# options:
+#   backup_mode: incremental
+#   parallel_workers: 8                  # Un worker por sensor
+#   incremental:
+#     schedule: "*/5 * * * *"             # Cada 5 minutos
+
+# ========================================
+# CONFIGURACIÓN TIPO C: BACKUP HISTÓRICO MASIVO
+# ========================================
+# Use case: Migrar datos históricos de un año completo
+#
+# measurements:
+#   include: []                          # Todas las mediciones
+#
+# options:
+#   backup_mode: range
+#   parallel_workers: 16                 # Máximo paralelismo
+#   range:
+#     start_date: "2023-01-01T00:00:00Z"
+#     end_date: "2023-12-31T23:59:59Z"
+#   days_of_pagination: 1                # Chunks pequeños para seguridad
+
+# ========================================
+# CONFIGURACIÓN TIPO D: MÚLTIPLES MEDICIONES
+# ========================================
+# Use case: Varias mediciones con campos específicos cada una
+#
+# measurements:
+#   include: [cpu, memory, disk, network]
+#   specific:
+#     cpu:
+#       fields:
+#         include: [usage_user, usage_system, usage_idle]
+#     memory:
+#       fields:
+#         include: [used, available, percent]
+#     disk:
+#       fields:
+#         include: [used_percent, free]
+#     network:
+#       fields:
+#         include: [bytes_sent, bytes_recv]
+#
+# options:
+#   parallel_workers: 6                  # Balance para múltiples mediciones
+#   incremental:
+#     schedule: "0 */6 * * *"             # Cada 6 horas
+
+# =============================================
+# PASOS PARA CONFIGURAR TU BACKUP
+# =============================================
+#
+# 1. COPIA ESTE TEMPLATE:
+#    cp backup_config.yaml.template mi_configuracion.yaml
+#
+# 2. CONFIGURA LOS SERVIDORES:
+#    - Ajusta las URLs de source y destination
+#    - Configura autenticación si es necesaria
+#
+# 3. DEFINE QUÉ RESPALDAR:
+#    - Especifica bases de datos en source.databases
+#    - Configura mediciones en measurements.include/exclude
+#    - Define campos específicos en measurements.specific
+#
+# 4. CONFIGURA PARALELIZACIÓN:
+#    - Cuenta cuántos campos vas a procesar
+#    - Configura parallel_workers apropiadamente
+#    - Para empezar usa parallel_workers: 1
+#
+# 5. CONFIGURA HORARIOS:
+#    - Para backup continuo: incremental.schedule con cron
+#    - Para backup único: range con fechas específicas
+#
+# 6. PERSONALIZA LOGGING:
+#    - Cambia loki.tags.config al nombre de tu archivo
+#    - Ajusta log_level según necesidades
+#
+# 7. VALIDA LA CONFIGURACIÓN:
+#    python main.py --validate-only
+#
+# 8. EJECUTA EL BACKUP:
+#    python main.py --config /config --verbose
+#
+# 9. MONITOREA LOS LOGS:
+#    tail -f /var/log/backup_influxdb/mi_configuracion.yaml/backup.log
+#
+# 10. REVISA MÉTRICAS:
+#    grep "Parallelization metrics" logs/*.log
+
+# =============================================
+# ¿NECESITAS AYUDA?
+# =============================================
+#
+# 📖 Documentación completa: README.md
+# 🔧 Configuraciones ejemplo: config/irr.yaml, config/temp.yaml
+# 🐛 Troubleshooting: Ver sección "Troubleshooting" en README.md
+# 📊 Métricas: Dashboard Grafana en http://localhost:3000
+#
+# COMANDO ÚTILES:
+# - Validar: python main.py --validate-only
+# - Ejecutar: python main.py --config /config
+# - Debug: python main.py --config /config --verbose
+# - Ver logs: tail -f /var/log/backup_influxdb/*/backup.log
+#
+# =============================================

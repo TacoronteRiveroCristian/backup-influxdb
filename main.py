@@ -77,8 +77,11 @@ class BackupOrchestrator:
 
         def signal_handler(signum, frame):
             self.logger.info(
-                f"Received signal {signum}, initiating shutdown..."
+                f"Received signal {signum}, initiating graceful shutdown..."
             )
+
+            # Para procesos de larga duración, solo establecer la señal de shutdown
+            # pero permitir que el bucle principal maneje la terminación
             self.shutdown_event.set()
 
         signal.signal(signal.SIGINT, signal_handler)
@@ -141,10 +144,11 @@ class BackupOrchestrator:
         """
         try:
             config = ConfigManager(config_path)
+            schedule = config.get_schedule()
             return (
                 config.get_backup_mode() == "incremental"
-                and config.get_schedule() is not None
-                and config.get_schedule().strip() != ""
+                and schedule is not None
+                and schedule.strip() != ""
             )
         except:
             return False
@@ -177,25 +181,41 @@ class BackupOrchestrator:
                     )
                     return
 
+                # Para procesos de larga duración, reportar inicio inmediatamente
+                if self._is_long_running_process(config_path):
+                    results_queue.put(
+                        {
+                            "config": process_name,
+                            "success": True,
+                            "long_running": True,
+                            "start_time": datetime.now().isoformat(),
+                            "status": "RUNNING (Scheduled backup process)",
+                        }
+                    )
+
                 # Ejecutar backup
                 start_time = datetime.now()
                 result = processor.run()
                 end_time = datetime.now()
 
-                # Preparar resultado
-                result_data = {
-                    "config": process_name,
-                    "success": result.get("success", False),
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat(),
-                    "duration": (end_time - start_time).total_seconds(),
-                    "stats": result.get("stats", {}),
-                }
+                # Para procesos de corta duración, reportar resultado final
+                if not self._is_long_running_process(config_path):
+                    # Preparar resultado
+                    result_data = {
+                        "config": process_name,
+                        "success": result.get("success", False),
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "duration": (end_time - start_time).total_seconds(),
+                        "stats": result.get("stats", {}),
+                    }
 
-                if not result.get("success"):
-                    result_data["error"] = result.get("error", "Unknown error")
+                    if not result.get("success"):
+                        result_data["error"] = result.get(
+                            "error", "Unknown error"
+                        )
 
-                results_queue.put(result_data)
+                    results_queue.put(result_data)
 
         except Exception as e:
             results_queue.put(
@@ -222,10 +242,9 @@ class BackupOrchestrator:
         """
         results = []
         collected = 0
-        short_running_count = expected_processes - len(long_running_configs)
 
-        # Para procesos de corta duración, esperar resultados normalmente
-        while collected < short_running_count:
+        # Esperar resultados de TODOS los procesos (corta y larga duración)
+        while collected < expected_processes:
             try:
                 # Esperar resultado con timeout
                 result = self.results_queue.get(timeout=30)
@@ -234,46 +253,40 @@ class BackupOrchestrator:
 
                 config_name = result.get("config", "Unknown")
                 success = result.get("success", False)
-                status = "SUCCESS" if success else "FAILED"
+                is_long_running = result.get("long_running", False)
 
-                self.logger.info(f"Process {config_name}: {status}")
-
-                if not success:
-                    error = result.get("error", "Unknown error")
-                    self.logger.error(f"Process {config_name} error: {error}")
+                if is_long_running:
+                    status = result.get("status", "RUNNING")
+                    self.logger.info(f"Process {config_name}: {status}")
                 else:
-                    stats = result.get("stats", {})
-                    duration = result.get("duration", 0)
-                    self.logger.info(
-                        f"Process {config_name} completed in {duration:.2f}s"
-                    )
+                    status = "SUCCESS" if success else "FAILED"
+                    self.logger.info(f"Process {config_name}: {status}")
 
-                    if stats:
-                        records = stats.get("records_transferred", 0)
-                        databases = stats.get("databases_processed", 0)
-                        measurements = stats.get("measurements_processed", 0)
-                        self.logger.info(
-                            f"  - Databases: {databases}, Measurements: {measurements}, Records: {records}"
+                    if not success:
+                        error = result.get("error", "Unknown error")
+                        self.logger.error(
+                            f"Process {config_name} error: {error}"
                         )
+                    else:
+                        stats = result.get("stats", {})
+                        duration = result.get("duration", 0)
+                        self.logger.info(
+                            f"Process {config_name} completed in {duration:.2f}s"
+                        )
+
+                        if stats:
+                            records = stats.get("records_transferred", 0)
+                            databases = stats.get("databases_processed", 0)
+                            measurements = stats.get(
+                                "measurements_processed", 0
+                            )
+                            self.logger.info(
+                                f"  - Databases: {databases}, Measurements: {measurements}, Records: {records}"
+                            )
 
             except Exception as e:
                 self.logger.warning(f"Timeout waiting for process result: {e}")
                 break
-
-        # Para procesos de larga duración, crear resultados simulados
-        for config_name in long_running_configs:
-            results.append(
-                {
-                    "config": config_name,
-                    "success": True,
-                    "long_running": True,
-                    "start_time": datetime.now().isoformat(),
-                    "status": "RUNNING (Scheduled backup process)",
-                }
-            )
-            self.logger.info(
-                f"Process {config_name}: RUNNING (Long-running scheduled process)"
-            )
 
         return results
 
@@ -315,11 +328,15 @@ class BackupOrchestrator:
         if total_records > 0 or total_databases > 0 or total_measurements > 0:
             self.logger.info(f"Total records transferred: {total_records}")
             self.logger.info(f"Total databases processed: {total_databases}")
-            self.logger.info(f"Total measurements processed: {total_measurements}")
+            self.logger.info(
+                f"Total measurements processed: {total_measurements}"
+            )
 
         # Detalles de procesos de larga duración
         if long_running > 0:
-            self.logger.info("\nLong-running processes (will continue in background):")
+            self.logger.info(
+                "\nLong-running processes (will continue in background):"
+            )
             for result in results:
                 if result.get("long_running", False):
                     config = result.get("config", "Unknown")
@@ -416,7 +433,9 @@ class BackupOrchestrator:
             for process in self.processes:
                 if process.name in long_running_process_names:
                     # No matar procesos de larga duración - dejarlos corriendo
-                    self.logger.info(f"Leaving long-running process {process.name} active (PID: {process.pid})")
+                    self.logger.info(
+                        f"Leaving long-running process {process.name} active (PID: {process.pid})"
+                    )
                     continue
 
                 if process.is_alive():
@@ -435,19 +454,98 @@ class BackupOrchestrator:
             duration = end_time - start_time
 
             # Verificar si hay procesos de larga duración
-            long_running_count = sum(1 for r in results if r.get("long_running", False))
+            long_running_count = sum(
+                1 for r in results if r.get("long_running", False)
+            )
 
             if long_running_count > 0:
                 self.logger.info(
                     f"Orchestrator completed in {duration.total_seconds():.2f} seconds"
                 )
-                self.logger.info(f"{long_running_count} scheduled backup process(es) continue running in background")
+                self.logger.info(
+                    f"{long_running_count} scheduled backup process(es) continue running in background"
+                )
             else:
                 self.logger.info(
                     f"All processes completed in {duration.total_seconds():.2f} seconds"
                 )
 
             self._print_summary(results)
+
+            # Si hay procesos de larga duración, mantener el orquestador vivo
+            if long_running_count > 0:
+                self.logger.info(
+                    "Orchestrator will stay alive to monitor scheduled backup processes..."
+                )
+                self.logger.info("Press Ctrl+C to stop all processes and exit")
+
+                try:
+                    # Monitorear procesos de larga duración
+                    while True:
+                        time.sleep(60)  # Verificar cada minuto
+
+                        # Verificar si algún proceso de larga duración ha terminado
+                        active_processes = []
+                        for process in self.processes:
+                            if (
+                                process.name in long_running_process_names
+                                and process.is_alive()
+                            ):
+                                active_processes.append(process)
+                            elif (
+                                process.name in long_running_process_names
+                                and not process.is_alive()
+                            ):
+                                self.logger.warning(
+                                    f"Long-running process {process.name} has terminated unexpectedly"
+                                )
+
+                        # Si no quedan procesos de larga duración activos, salir
+                        if not active_processes:
+                            self.logger.info(
+                                "All long-running processes have terminated. Exiting orchestrator."
+                            )
+                            break
+
+                        # Log de estado cada 10 minutos
+                        if hasattr(self, "_status_counter"):
+                            self._status_counter += 1
+                        else:
+                            self._status_counter = 1
+
+                        if self._status_counter % 10 == 0:
+                            self.logger.info(
+                                f"Orchestrator monitoring {len(active_processes)} active backup process(es)"
+                            )
+
+                except KeyboardInterrupt:
+                    self.logger.info(
+                        "Received interrupt signal, stopping all processes..."
+                    )
+                    self.shutdown_event.set()
+
+                    # Terminar procesos de larga duración
+                    for process in self.processes:
+                        if (
+                            process.name in long_running_process_names
+                            and process.is_alive()
+                        ):
+                            self.logger.info(
+                                f"Terminating long-running process {process.name}"
+                            )
+                            process.terminate()
+
+                    # Esperar terminación con timeout
+                    for process in self.processes:
+                        if process.name in long_running_process_names:
+                            process.join(timeout=10)
+                            if process.is_alive():
+                                self.logger.warning(
+                                    f"Force killing process {process.name}"
+                                )
+                                process.kill()
+
+                    return 130  # Código de salida para SIGINT
 
             # Determinar código de salida
             failed_count = sum(
