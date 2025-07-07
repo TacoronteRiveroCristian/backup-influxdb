@@ -1,0 +1,246 @@
+# InfluxDB Backup Configuration
+# -------------------------
+# Este archivo contiene TODA la configuración para el servicio de backup de InfluxDB.
+# Copia este archivo a backup_config.yaml y personalízalo según tus necesidades.
+
+# Configuración global
+global:
+  # Red Docker para contenedores
+  # Ejemplo: 'influxdb_network' - Debe coincidir con la red donde están los contenedores de InfluxDB
+  # Si los contenedores están en diferentes redes, crea una red compartida con:
+  # docker network create influxdb_network
+  network: influxdb_network
+
+# Configuración InfluxDB origen
+source:
+  # URL del servidor InfluxDB origen (requerido)
+  # Formato: http://hostname:puerto o https://hostname:puerto
+  # Ejemplo: 'http://source-influxdb:8086' para contenedor Docker
+  # Ejemplo: 'http://192.168.1.100:8086' para servidor remoto
+  url: http://source-influxdb:8086
+
+  # Habilitar SSL/TLS para la conexión de origen
+  # Poner a 'true' si la URL empieza por https://
+  ssl: false
+  # Verificar el certificado SSL del servidor de origen.
+  # Recomendado 'true' en producción, 'false' para certificados autofirmados.
+  verify_ssl: true
+
+  # Lista de bases de datos a respaldar.
+  # Si esta lista se deja vacía (databases: []), se respaldarán TODAS las bases de datos del servidor origen.
+  # Cada entrada debe tener:
+  #   - name: Nombre de la base de datos en el origen.
+  #   - destination: Nombre que tendrá en el destino (puede ser el mismo).
+  #
+  # Ejemplo (respaldar solo bases de datos específicas del servidor InfluxDB de origen):
+  # databases:
+  #   - name: telegraf
+  #     destination: telegraf
+  #   - name: database_2
+  #     destination: database_2_backup
+  #
+  # Ejemplo (respaldar TODAS las bases de datos del servidor InfluxDB de origen):
+  # databases: []
+  databases:
+    - name: metrics
+      destination: metrics_backup
+    - name: telegraf
+      destination: telegraf_backup
+
+  # Prefijo y sufijo opcionales para los nombres de las bases de datos en el destino.
+  # Útil para diferenciar las bases de datos respaldadas.
+  # - Si 'databases' no está vacía, se aplica sobre el campo 'destination'.
+  #   Ej: prefix: 'bkp_', destination: 'metrics'  => bkp_metrics
+  # - Si 'databases' está vacía, se aplica sobre el nombre original de la BBDD.
+  #   Ej: suffix: '_bkp', BBDD origen: 'telegraf' => telegraf_bkp
+  # Dejar en blanco para no usar.
+  prefix: ""
+  suffix: ""
+
+  # Autenticación (si es necesaria)
+  # Deja en blanco si no se requiere autenticación
+  # Para InfluxDB con autenticación habilitada:
+  # user: "admin"
+  # password: "password123"
+  user: ""
+  password: ""
+
+  # Periodo de tiempo para agrupar datos en consultas
+  # Valores comunes: 30s, 1m, 5m, 1h
+  # Valores más pequeños reducen el uso de memoria pero aumentan el número de consultas
+  # Valores más grandes son más rápidos pero consumen más memoria
+  # Para NO usar agrupamiento, puedes:
+  # - Dejarlo completamente vacío: group_by:
+  # - O usar comillas vacías: group_by: ""
+  # NOTA: La paginación (para conjuntos grandes de datos) REQUIERE un valor válido.
+  # Si los datos abarcan más días que 'days_of_pagination', debes especificar un valor.
+  group_by: ""
+
+# Configuración InfluxDB destino
+destination:
+  # URL del servidor InfluxDB destino (requerido)
+  # Formato: http://hostname:puerto
+  # Puede ser el mismo servidor que el origen (usando otra base de datos)
+  # o un servidor completamente diferente
+  url: http://destination-influxdb:8086
+
+  # Habilitar SSL/TLS para la conexión de destino
+  ssl: false
+  # Verificar el certificado SSL del servidor de destino
+  verify_ssl: true
+
+  # Autenticación (si es necesaria)
+  # Configura según los requisitos del servidor destino
+  user: ""
+  password: ""
+
+# Configuración de filtrado de mediciones
+measurements:
+  # Listas globales de inclusión/exclusión para mediciones
+  # Hay dos formas de usar estas listas:
+
+  # OPCIÓN 1: Incluir mediciones específicas
+  # Si 'include' tiene elementos, SOLO esas mediciones serán respaldadas
+  # En este caso, 'exclude' es ignorado y no es necesario configurarlo
+  # Ejemplo: include: [cpu, memory, disk] - Solo respaldar estas 3 mediciones
+
+  # OPCIÓN 2: Excluir mediciones específicas
+  # Si 'include' está vacío, TODAS las mediciones serán respaldadas EXCEPTO
+  # las que estén en la lista 'exclude'
+  # Ejemplo: include: [] y exclude: [windows_services, logs]
+  # Útil cuando tienes muchas mediciones y solo quieres excluir algunas pocas
+
+  # Lista de mediciones a incluir (vacío = incluir todas excepto las excluidas)
+  include: []
+
+  # Lista de mediciones a excluir (solo se aplica si 'include' está vacío)
+  exclude: []
+
+  # Configuraciones específicas por medición
+  # Estas sobrescriben la configuración global para mediciones individuales
+  # NOTA: Si borras toda esta sección 'specific' o la dejas vacía (specific: {}),
+  # el sistema respaldará TODAS las mediciones según las reglas de include/exclude globales
+  # y respaldará TODOS los campos de cada medición sin filtrar.
+  specific:
+    # Ejemplo: Configuración medición CPU - Sólo campos específicos
+    cpu:
+      fields:
+        # Campos a incluir (vacío significa todos)
+        # Ejemplo práctico: Solo nos interesan los datos de uso, no métricas detalladas
+        include: [usage_user, usage_system, usage_idle]
+        # Campos a excluir (aplicado después de incluir)
+        exclude: []
+        # Tipos a incluir: 'numeric', 'string', 'boolean'
+        # Aquí aceptamos cualquier tipo de datos para estos campos
+        types: [numeric, string, boolean]
+
+    # Ejemplo: Configuración medición Memory - Excluir campos específicos
+    memory:
+      fields:
+        # Incluir todos los campos (lista vacía)
+        include: []
+        # Excluir campos específicos (por ejemplo, campos que no son relevantes)
+        # Ejemplo práctico: No queremos datos de buffer/cache que cambian constantemente
+        exclude: [buffer, cached]
+        # Solo datos numéricos y cadenas
+        types: [numeric, string]
+
+    # Ejemplo: Configuración medición Disk - Solo datos numéricos
+    disk:
+      fields:
+        # Ejemplo práctico: Solo nos interesan métricas numéricas para discos
+        # Ignoramos etiquetas y valores booleanos
+        types: [numeric]
+
+# Opciones de backup
+options:
+  # Modo de backup: 'incremental' o 'range'.
+  # - 'incremental': Copia datos nuevos desde la última marca de tiempo encontrada en el destino.
+  #                  Diseñado para ejecuciones periódicas (usando 'schedule').
+  # - 'range': Copia datos para un rango de fechas específico en una sola ejecución.
+  #            El script se detendrá después de completar el backup.
+  backup_mode: incremental
+
+  # --- Configuración para modo 'range' (backup de un periodo específico) ---
+  # Se utiliza solo si backup_mode es 'range'. El script se ejecuta una vez y termina.
+  range:
+    # Fecha de inicio del backup (formato ISO 8601: YYYY-MM-DDTHH:MM:SSZ). Requerido.
+    start_date: ""
+    # Fecha de fin del backup (formato ISO 8601: YYYY-MM-DDTHH:MM:SSZ). Requerido.
+    end_date: ""
+
+  # --- Configuración para modo 'incremental' (backup continuo) ---
+  # Se utiliza solo si backup_mode es 'incremental'.
+  incremental:
+    # Expresión cron para backups programados.
+    # Si se deja vacío, se ejecutará una sola vez en modo incremental.
+    # Ejemplos: "0 0 * * *" (diario), "0 */6 * * *" (cada 6 horas).
+    schedule: ""
+
+  # --- Opciones generales (aplicables a ambos modos) ---
+  # Timeout del cliente en segundos para conexiones HTTP.
+  timeout_client: 20
+
+  # Número de reintentos si una consulta o escritura falla por un error de red.
+  # Poner a 0 para deshabilitar los reintentos.
+  retries: 3
+
+  # Segundos de espera entre cada reintento.
+  retry_delay: 5
+
+  # Días para dividir las consultas grandes y evitar problemas de memoria.
+  # Un valor más pequeño (ej. 1) es más seguro para BBDD muy grandes, pero más lento.
+  # Un valor mayor (ej. 30) es más rápido pero consume más memoria.
+  days_of_pagination: 7
+
+  # Umbral para considerar un campo obsoleto. Si el último dato de un campo específico
+  # en el destino es más antiguo que este umbral, dicho campo se ignorará en el backup.
+  # Esto evita consultas innecesarias para campos que ya no reciben datos.
+  # Unidades válidas: s, m, h, d, w, M (meses), y (años). Ejemplo: "6M" para 6 meses.
+  # Dejar vacío "" para deshabilitar esta comprobación.
+  field_obsolete_threshold: "6M"
+
+  # Segundos de espera antes de reintentar una conexión fallida al iniciar.
+  # Si el script no puede conectar con InfluxDB al arrancar, esperará este tiempo
+  # antes de volver a intentarlo. Esto se aplica a la conexión inicial.
+  initial_connection_retry_delay: 60
+
+  # --- Configuración de Logs ---
+  # Directorio para los archivos de log dentro del contenedor.
+  # El sistema creará automáticamente un subdirectorio con el nombre del fichero de configuración.
+  # Ejemplo: /var/log/backup_influxdb/ y dentro de este directorio se creará otro directorio con el
+  # nombre del archivo de configuración .yaml donde se encontrarán todos los .log rotando
+  log_directory: /var/log/backup_influxdb/
+
+  # Configuración de rotación de logs
+  # Permite rotar los archivos de log basados en tiempo para no ocupar todo el disco.
+  log_rotation:
+    # Habilitar o deshabilitar la rotación de logs.
+    enabled: true
+    # Cuándo rotar. 'D' para diario, 'H' para por hora, 'M' para por minuto.
+    # Ver la documentación de TimedRotatingFileHandler de Python para más opciones.
+    when: 'D'
+    # Con qué frecuencia rotar, basado en la unidad de 'when'. 1 = cada día/hora/minuto.
+    interval: 1
+    # Cuántos archivos de log antiguos mantener.
+    backup_count: 5
+
+  # Configuración para enviar logs a Loki
+  loki:
+    # Habilitar o deshabilitar el envío de logs a Loki.
+    enabled: false
+    # URL del servidor Loki (sin http:// ni el puerto).
+    url: "loki"
+    # Puerto del servidor Loki.
+    port: 3100
+    # Etiquetas (tags) que se añadirán a todos los logs enviados a Loki.
+    # Es útil para filtrar en Grafana/Loki.
+    # Se añadirá automáticamente la etiqueta 'config_name' con el nombre del fichero .yaml.
+    tags:
+      app: "influxdb_backup"
+      environment: "production"
+
+  # Nivel de log: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # DEBUG: muy detallado.
+  # INFO: recomendado para operación normal.
+  log_level: INFO

@@ -1,0 +1,95 @@
+### Shared configuration for all services backup ###
+x-sysadmintoolkit-backup-service: &sysadmintoolkit-backup-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  volumes:
+    - ./volumes/backup_logs:/var/log/backup_influxdb
+    - ./config:/app/config
+    - ./src:/app/src
+  networks:
+    - backup-network
+  environment:
+    - PYTHONPATH=/app
+
+### Services ###
+services:
+  sysadmintoolkit-influxdb-dev: # InfluxDB server for development/testing
+    image: influxdb:1.8
+    container_name: sysadmintoolkit-influxdb-dev
+    ports:
+      - "8086:8086"
+    environment:
+      - INFLUXDB_DB=metrics
+      - INFLUXDB_HTTP_AUTH_ENABLED=false
+    volumes:
+      - ./volumes/influxdb/data:/var/lib/influxdb
+    profiles:
+      - development
+    networks:
+      - backup-network
+
+  sysadmintoolkit-loki-dev:
+    image: grafana/loki
+    container_name: sysadmintoolkit-loki-dev
+    user: "root"
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./volumes/loki/config.yaml:/etc/loki/local-config.yaml
+      - ./volumes/loki/data:/var/lib/loki
+    environment:
+      - LOKI_PORT=3100
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
+    networks:
+      - backup-network
+
+  sysadmintoolkit-grafana-dev: # Grafana server for development/testing
+    image: grafana/grafana:latest
+    container_name: sysadmintoolkit-grafana-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./volumes/grafana/data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_HTTP_PORT=3000
+    profiles:
+      - development
+    networks:
+      - backup-network
+
+  sysadmintoolkit-backup-service-dev: # Backup service for development
+    container_name: sysadmintoolkit-backup-service-dev
+    <<: *sysadmintoolkit-backup-service
+    volumes:
+      - ./:/app/
+      - ./volumes/backup_logs:/var/log/backup_influxdb # Path de ficheros .logs configurados en .config/*.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONPATH=/app
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    profiles:
+      - development
+    # Mantener el contenedor ejecutándose para devcontainer
+    command: sleep infinity
+    # Permitir capabilities para desarrollo
+    cap_add:
+      - SYS_PTRACE
+
+  sysadmintoolkit-backup-service-prod: # Backup service for production
+    container_name: sysadmintoolkit-backup-service-prod
+    <<: *sysadmintoolkit-backup-service
+    profiles:
+      - production
+    restart: unless-stopped
+    command: python /app/main.py
+
+### Networks ###
+networks:
+  backup-network:
+    driver: bridge
+    name: ${INFLUXDB_NETWORK:-influxdb-network}
