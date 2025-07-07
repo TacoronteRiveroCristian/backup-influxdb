@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from .utils import get_process_id
+from ..utils import get_process_id
 
 
 class LoggerManager:
@@ -335,7 +335,7 @@ class LoggerManager:
             stage: Etapa del proceso
         """
         try:
-            from .utils import calculate_memory_usage_mb
+            from ..utils import calculate_memory_usage_mb
 
             memory_mb = calculate_memory_usage_mb()
             logger.debug(f"Memory usage at {stage}: {memory_mb:.2f} MB")

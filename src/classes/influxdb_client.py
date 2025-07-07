@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Any, Tuple, Union
 from urllib.parse import urlencode
 import logging
 
-from .utils import (
+from ..utils import (
     retry_with_backoff, escape_influxdb_identifier,
     build_influxdb_line_protocol, classify_influxdb_type,
     generate_time_ranges, format_influxdb_time, parse_influxdb_time,

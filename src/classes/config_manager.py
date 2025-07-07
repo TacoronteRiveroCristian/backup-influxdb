@@ -16,7 +16,7 @@ from schema import And
 from schema import Optional as SchemaOptional
 from schema import Or, Schema, SchemaError
 
-from .utils import (
+from ..utils import (
     get_config_name_from_path,
     parse_duration,
     safe_get_nested_dict,

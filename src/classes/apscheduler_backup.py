@@ -26,7 +26,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from .utils import get_process_id
+from ..utils import get_process_id
 
 
 class APSchedulerError(Exception):

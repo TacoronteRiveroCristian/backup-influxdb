@@ -14,16 +14,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from .apscheduler_backup import APBackupScheduler
-from .config_manager import ConfigManager
-from .influxdb_client import InfluxDBClient
-from .logger_manager import LoggerManager
-from .utils import (
+from ..utils import (
     calculate_memory_usage_mb,
     classify_influxdb_type,
     generate_time_ranges,
     parse_duration,
 )
+from .apscheduler_backup import APBackupScheduler
+from .config_manager import ConfigManager
+from .influxdb_client import InfluxDBClient
+from .logger_manager import LoggerManager
 
 
 class BackupProcessor:
