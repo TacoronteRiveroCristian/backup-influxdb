@@ -4,12 +4,12 @@
 # Sistema de Backup Campo por Campo con Paralelización Configurable
 #
 # CARACTERÍSTICAS PRINCIPALES:
-# ✅ Procesamiento campo por campo independiente
-# ✅ Paralelización configurable (1-16+ workers)
-# ✅ Prevención de contaminación cruzada
-# ✅ Timestamps específicos por campo
-# ✅ Thread-safe logging con identificadores únicos
-# ✅ Métricas de eficiencia en tiempo real
+#   - Procesamiento campo por campo independiente
+#   - Paralelización configurable (1-16+ workers)
+#   - Prevención de contaminación cruzada
+#   - Timestamps específicos por campo
+#   - Thread-safe logging con identificadores únicos
+#   - Métricas de eficiencia en tiempo real
 #
 # INSTRUCCIONES DE USO:
 # 1. Copia este archivo: cp backup_config.yaml.template mi_backup.yaml
@@ -537,10 +537,10 @@ options:
 # ¿NECESITAS AYUDA?
 # =============================================
 #
-# 📖 Documentación completa: README.md
-# 🔧 Configuraciones ejemplo: config/irr.yaml, config/temp.yaml
-# 🐛 Troubleshooting: Ver sección "Troubleshooting" en README.md
-# 📊 Métricas: Dashboard Grafana en http://localhost:3000
+#  Documentación completa: README.md
+#  Configuraciones ejemplo: config/irr.yaml, config/temp.yaml
+#  Troubleshooting: Ver sección "Troubleshooting" en README.md
+#  Métricas: Dashboard Grafana en http://localhost:3000
 #
 # COMANDO ÚTILES:
 # - Validar: python main.py --validate-only
