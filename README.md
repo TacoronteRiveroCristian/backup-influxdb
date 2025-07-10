@@ -795,7 +795,7 @@ black src/
 isort src/
 
 # Coverage
-python -m pytest test/ --cov=src --cov-report=html
+python -m pytest test/ --cov=src --cov-config=test/.coveragerc --cov-report=html
 
 # Profiling
 python -m cProfile -s cumtime main.py --config config/backup_config.yaml

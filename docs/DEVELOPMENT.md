@@ -70,7 +70,7 @@ python -m pytest test/unit/ -v
 python -m pytest test/integration/ -v
 
 # Tests con coverage
-python -m pytest test/ --cov=src --cov-report=html --cov-report=term
+python -m pytest test/ --cov=src --cov-config=test/.coveragerc --cov-report=html --cov-report=term
 
 # Tests de rendimiento
 python -m pytest test/performance/ -v --benchmark-only

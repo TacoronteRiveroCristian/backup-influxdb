@@ -301,7 +301,7 @@ docker-compose -f test/docker/docker-compose.test.yml down -v
 ### Estructura de Resultados
 
 ```
-test/test_results/
+test/test_result/
 ├── test_report.json           # Reporte JSON completo
 ├── test_report.html           # Reporte HTML visual
 ├── unit_tests.json           # Resultados tests unitarios
@@ -390,7 +390,7 @@ python -c "import pytest, numpy, pandas, faker; print('Dependencias OK')"
 ```bash
 # Limpiar todo y empezar de nuevo
 docker-compose -f test/docker/docker-compose.test.yml down -v
-rm -rf test/test_results/
+rm -rf test/test_result/
 python test/run_tests.py --unit-only  # Solo unitarios primero
 ```
 
@@ -451,7 +451,7 @@ python -m pytest test/integration/test_full_backup_cycle.py::TestFullBackupCycle
 python test/run_tests.py --demo-data-only
 
 # Ver los datos generados
-ls -la test/test_results/demo_data/
+ls -la test/test_result/demo_data/
 ```
 
 ## Ejemplo de Test Personalizado
@@ -528,7 +528,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: test-results
-          path: test/test_results/
+          path: test/test_result/
 ```
 
 ---
@@ -540,6 +540,6 @@ Para problemas específicos del sistema de testing:
 1. **Verificar logs**: `docker-compose -f test/docker/docker-compose.test.yml logs`
 2. **Comprobar conectividad**: `curl http://localhost:8086/ping`
 3. **Ejecutar tests unitarios primero**: `python test/run_tests.py --unit-only`
-4. **Revisar reportes generados**: `test/test_results/test_report.html`
+4. **Revisar reportes generados**: `test/test_result/test_report.html`
 
 **El sistema de testing está diseñado para ser robusto, reproducible y exhaustivo, proporcionando confianza completa en la integridad del proceso de backup.**

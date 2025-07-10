@@ -87,7 +87,7 @@ python -m pytest test/unit/ -v --tb=short
 ### Con Reporte de Cobertura
 
 ```bash
-python -m pytest test/unit/ --cov=src --cov-report=html --cov-report=term
+python -m pytest test/unit/ --cov=src --cov-config=test/.coveragerc --cov-report=html --cov-report=term
 ```
 
 ## Tests de Integración
@@ -345,8 +345,7 @@ python test/run_tests.py --unit-only
 docker-compose -f test/docker/docker-compose.test.yml down
 
 # Limpiar archivos de test
-rm -rf test/test_results/
-rm -rf test/coverage/
+rm -rf test/test_result/
 ```
 
 ## Métricas y Reportes
@@ -355,21 +354,21 @@ rm -rf test/coverage/
 
 Después de ejecutar tests, se genera un reporte HTML en:
 ```
-test/test_results/final_report.html
+test/test_result/final_report.html
 ```
 
 ### Métricas JSON
 
 Datos detallados en:
 ```
-test/test_results/final_report.json
+test/test_result/final_report.json
 ```
 
 ### Cobertura
 
 Reporte de cobertura en:
 ```
-test/coverage/html/index.html
+test/test_result/coverage_html/index.html
 ```
 
 ## Contribuir a los Tests

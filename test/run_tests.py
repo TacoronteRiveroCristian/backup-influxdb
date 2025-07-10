@@ -178,42 +178,170 @@ class TestRunner:
             # Volver al directorio original
             os.chdir(self.project_root)
 
-    def cleanup_docker_containers(self):
-        """Limpiar contenedores Docker después de los tests"""
-        if not self.containers_started:
-            return
+    def cleanup_docker_containers(self, force=False):
+        """
+        Limpiar contenedores Docker después de los tests.
 
-        if self.keep_containers:
+        Args:
+            force: Si True, fuerza la limpieza ignorando configuraciones
+        """
+        if not force and self.keep_containers:
             print(
                 "\nManteniendo contenedores Docker activos (según configuración)"
             )
+            print(
+                "Para forzar la limpieza, ejecuta: KEEP_TEST_CONTAINERS=false python test/run_tests.py"
+            )
             return
 
-        print("\nLimpiando contenedores Docker...")
+        print("\nLimpiando servicios Docker de testing...")
 
         docker_compose_file = (
             self.project_root / "test" / "docker" / "docker-compose.test.yml"
         )
 
+        if not docker_compose_file.exists():
+            print("WARNING: Archivo docker-compose.test.yml no encontrado")
+            return
+
         try:
             # Cambiar al directorio de docker
+            original_dir = os.getcwd()
             os.chdir(docker_compose_file.parent)
 
-            # Parar contenedores
-            result = subprocess.run(
-                ["docker-compose", "-f", "docker-compose.test.yml", "down"],
-                check=True,
+            # 1. Parar y eliminar contenedores, redes y volúmenes
+            print("  → Parando contenedores...")
+            subprocess.run(
+                [
+                    "docker-compose",
+                    "-f",
+                    "docker-compose.test.yml",
+                    "down",
+                    "-v",
+                    "--remove-orphans",
+                ],
+                check=False,  # No fallar si ya están parados
                 capture_output=True,
                 text=True,
             )
 
-            print("Contenedores Docker detenidos")
+            # 2. Eliminar contenedores específicos por nombre (por si acaso)
+            container_names = [
+                "influxdb_source_test",
+                "influxdb_destination_test",
+                "influxdb_extra_test",
+                "influxdb_test_runner",
+            ]
+
+            print("  → Eliminando contenedores específicos...")
+            for container in container_names:
+                subprocess.run(
+                    ["docker", "rm", "-f", container],
+                    check=False,  # No fallar si no existe
+                    capture_output=True,
+                    text=True,
+                )
+
+                # 3. Eliminar redes específicas si existen y no tienen contenedores activos no-test
+            print("  → Limpiando redes...")
+            test_networks = [
+                "influxdb_test_network",
+                "docker_influxdb_test_network",
+            ]
+
+            for network in test_networks:
+                # Verificar si la red tiene contenedores conectados
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "network",
+                        "inspect",
+                        network,
+                        "--format",
+                        "{{.Containers}}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if result.returncode == 0:  # Red existe
+                    containers_info = result.stdout.strip()
+                    # Si tiene contenedores conectados, verificar si son solo de desarrollo
+                    if containers_info and "map[" in containers_info:
+                        print(
+                            f"    → Red {network} tiene contenedores conectados, verificando..."
+                        )
+                        # Obtener detalles de la red para ver qué contenedores están conectados
+                        inspect_result = subprocess.run(
+                            ["docker", "network", "inspect", network],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+
+                        if (
+                            "dev" in inspect_result.stdout
+                            or "sysadmintoolkit" in inspect_result.stdout
+                        ):
+                            print(
+                                f"    → Manteniendo red {network} (contiene contenedor de desarrollo)"
+                            )
+                            continue
+
+                    # Intentar eliminar la red
+                    subprocess.run(
+                        ["docker", "network", "rm", network],
+                        check=False,  # No fallar si no puede eliminar
+                        capture_output=True,
+                        text=True,
+                    )
+
+            # 4. Limpiar volúmenes no utilizados relacionados con tests
+            print("  → Limpiando volúmenes...")
+            subprocess.run(
+                ["docker", "volume", "prune", "-f"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            # 5. Verificar que no queden contenedores activos
+            result = subprocess.run(
+                [
+                    "docker",
+                    "ps",
+                    "--filter",
+                    "name=test",
+                    "--format",
+                    "{{.Names}}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            remaining_containers = (
+                result.stdout.strip().split("\n")
+                if result.stdout.strip()
+                else []
+            )
+            if remaining_containers:
+                print(
+                    f"  → WARNING: Contenedores aún activos: {remaining_containers}"
+                )
+            else:
+                print("  ✓ Todos los contenedores de test eliminados")
+
+            print("✓ Limpieza Docker completada")
 
         except subprocess.CalledProcessError as e:
-            print(f"WARNING: Error al detener contenedores: {e}")
+            print(f"WARNING: Error durante la limpieza: {e}")
+        except Exception as e:
+            print(f"ERROR: Error inesperado durante la limpieza: {e}")
         finally:
             # Volver al directorio original
-            os.chdir(self.project_root)
+            os.chdir(original_dir)
 
     def run_unit_tests(self) -> dict:
         """
@@ -225,7 +353,7 @@ class TestRunner:
         print("\nEjecutando tests unitarios...")
 
         # Crear directorio de resultados
-        results_dir = self.project_root / "test" / "test_results"
+        results_dir = self.test_root / "test_result"
         results_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
@@ -236,7 +364,7 @@ class TestRunner:
             "-v",
             "--tb=short",
             "--json-report",
-            "--json-report-file=test/test_results/unit_tests.json",
+            f"--json-report-file={results_dir}/unit_tests.json",
         ]
 
         if self.verbose:
@@ -263,9 +391,7 @@ class TestRunner:
         """
         Muestra información detallada de los tests unitarios que fallaron.
         """
-        json_file = (
-            self.project_root / "test" / "test_results" / "unit_tests.json"
-        )
+        json_file = self.test_root / "test_result" / "unit_tests.json"
 
         if not json_file.exists():
             print("ERROR: No se pudo encontrar el archivo de resultados JSON")
@@ -479,7 +605,7 @@ class TestRunner:
         print("\nGenerando reporte de cobertura...")
 
         # Crear directorio de coverage
-        coverage_dir = self.project_root / "test" / "coverage"
+        coverage_dir = self.test_root / "test_result"
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
@@ -489,8 +615,9 @@ class TestRunner:
             str(self.test_root / "unit"),
             str(self.test_root / "integration"),
             "--cov=src",
-            "--cov-report=html:test/coverage/html",
-            "--cov-report=xml:test/coverage/coverage.xml",
+            f"--cov-config={self.test_root}/.coveragerc",
+            "--cov-report=html",
+            "--cov-report=xml",
             "--cov-report=term",
         ]
 
@@ -578,7 +705,7 @@ if __name__ == "__main__":
 
             # Guardar ubicación de datos de demo
             self.demo_data_location = str(
-                self.project_root / "test" / "demo_data"
+                self.test_root / "test_result" / "demo_data"
             )
 
             return {
@@ -630,9 +757,7 @@ if __name__ == "__main__":
         }
 
         # Guardar reporte en JSON
-        report_file = (
-            self.project_root / "test" / "test_results" / "final_report.json"
-        )
+        report_file = self.test_root / "test_result" / "final_report.json"
         report_file.parent.mkdir(parents=True, exist_ok=True)
 
         with open(report_file, "w") as f:
@@ -640,9 +765,7 @@ if __name__ == "__main__":
 
         # Generar reporte HTML
         html_report = self._generate_html_report(report)
-        html_file = (
-            self.project_root / "test" / "test_results" / "final_report.html"
-        )
+        html_file = self.test_root / "test_result" / "final_report.html"
 
         with open(html_file, "w") as f:
             f.write(html_report)
@@ -823,9 +946,12 @@ if __name__ == "__main__":
             results.append(demo_result)
 
         finally:
-            # Limpiar contenedores Docker
-            if include_docker:
-                self.cleanup_docker_containers()
+            # Limpiar contenedores Docker SIEMPRE (independientemente de si include_docker es True)
+            # Esto asegura que no queden contenedores corriendo
+            try:
+                self.cleanup_docker_containers(force=False)
+            except Exception as e:
+                print(f"WARNING: Error durante la limpieza final: {e}")
 
         # Generar reporte final
         self.generate_final_report(results)
@@ -870,10 +996,21 @@ def main():
         action="store_true",
         help="Solo crear datos de demostración",
     )
+    parser.add_argument(
+        "--cleanup-only",
+        action="store_true",
+        help="Solo limpiar contenedores Docker y salir",
+    )
 
     args = parser.parse_args()
 
     runner = TestRunner(verbose=args.verbose)
+
+    if args.cleanup_only:
+        print("Ejecutando limpieza de contenedores Docker...")
+        runner.cleanup_docker_containers(force=True)
+        print("Limpieza completada.")
+        return
 
     if args.create_demo_data:
         result = runner.create_test_data_demo()

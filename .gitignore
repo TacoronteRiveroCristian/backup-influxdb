@@ -2,8 +2,29 @@ volumes/**/data/
 config/*.yaml
 *.log
 *.logs
-test/test_results/
-test/coverage/
+
+# Archivos de testing y coverage (no deben generarse en raíz)
+# Todos los resultados deben ir a test/test_result/
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.hypothesis/
+coverage.xml
+*.cover
+.cache/
+.mypy_cache/
+.ruff_cache/
+.coveragerc
+
+# Resultados de tests (nueva ubicación correcta)
+test/test_result/
+
+# Archivos temporales de testing
+*.tmp
+*.temp
+temp/
+tmp/
 
 # Variables de entorno sensibles
 .env
