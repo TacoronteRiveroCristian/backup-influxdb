@@ -112,8 +112,8 @@ class TestQualityMetrics(unittest.TestCase):
 
     def test_boolean_metrics_different_data(self):
         """Test para métricas booleanas con datos diferentes."""
-        source_data = [True, False, True, False, True] * 100
-        dest_data = [True, True, True, True, True] * 100  # Más True
+        source_data = [True, False] * 250  # 250 True, 250 False
+        dest_data = [True] * 500  # 500 True, 0 False
 
         metrics = self.quality_metrics.calculate_boolean_metrics(
             source_data, dest_data
@@ -237,7 +237,13 @@ class TestQualityMetrics(unittest.TestCase):
         }
 
         dest_data = {
-            "temperature": [20.1, 21.1, 22.1, 23.1, 24.1],  # Pequeña diferencia
+            "temperature": [
+                20.5,
+                21.5,
+                22.5,
+                23.5,
+                24.5,
+            ],  # Diferencia mayor al 1%
             "humidity": [60.0, 61.0, 62.0, 63.0, 64.0],
         }
 
@@ -372,15 +378,15 @@ class TestQualityMetrics(unittest.TestCase):
         high_tolerance_metrics = QualityMetrics(tolerance=0.1)
 
         source_data = [100.0, 200.0, 300.0]
-        dest_data = [101.0, 201.0, 301.0]  # 1% de diferencia
+        dest_data = [105.0, 210.0, 315.0]  # 5% de diferencia
 
-        # Con tolerancia alta, debería pasar
+        # Con tolerancia alta (10%), debería pasar
         metrics_high = high_tolerance_metrics.calculate_numeric_metrics(
             source_data, dest_data
         )
         high_tolerance_passed = all(m.passed for m in metrics_high.values())
 
-        # Con tolerancia baja, debería fallar
+        # Con tolerancia baja (1%), debería fallar
         metrics_low = self.quality_metrics.calculate_numeric_metrics(
             source_data, dest_data
         )

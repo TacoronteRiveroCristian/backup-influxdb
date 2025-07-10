@@ -7,12 +7,12 @@ Script que ejecuta todos los tests del sistema de backup de InfluxDB,
 incluyendo tests unitarios, de integración y de calidad de datos.
 """
 
-import os
-import sys
 import argparse
-import subprocess
-import time
 import json
+import os
+import subprocess
+import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -38,8 +38,8 @@ class TestRunner:
         self.test_root = self.project_root / "test"
 
         # Configurar variables de entorno para testing
-        os.environ['TESTING'] = 'true'
-        os.environ['PYTHONPATH'] = str(self.project_root)
+        os.environ["TESTING"] = "true"
+        os.environ["PYTHONPATH"] = str(self.project_root)
 
     def check_dependencies(self) -> bool:
         """
@@ -49,15 +49,18 @@ class TestRunner:
             bool: True si todas las dependencias están disponibles
         """
         try:
-            import pytest
+            import faker
             import numpy
             import pandas
-            import faker
+            import pytest
+
             print("✓ Dependencias básicas disponibles")
             return True
         except ImportError as e:
             print(f"✗ Falta dependencia: {e}")
-            print("Instale las dependencias con: pip install -r test/requirements-test.txt")
+            print(
+                "Instale las dependencias con: pip install -r test/requirements-test.txt"
+            )
             return False
 
     def check_docker_services(self) -> bool:
@@ -71,8 +74,12 @@ class TestRunner:
             import requests
 
             # URLs de los servidores de testing
-            source_url = os.getenv('INFLUXDB_SOURCE_URL', 'http://localhost:8086')
-            dest_url = os.getenv('INFLUXDB_DESTINATION_URL', 'http://localhost:8087')
+            source_url = os.getenv(
+                "INFLUXDB_SOURCE_URL", "http://localhost:8086"
+            )
+            dest_url = os.getenv(
+                "INFLUXDB_DESTINATION_URL", "http://localhost:8087"
+            )
 
             # Verificar servidor origen
             try:
@@ -80,7 +87,9 @@ class TestRunner:
                 if response.status_code == 200:
                     print("✓ Servidor InfluxDB origen disponible")
                 else:
-                    print("✗ Servidor InfluxDB origen no responde correctamente")
+                    print(
+                        "✗ Servidor InfluxDB origen no responde correctamente"
+                    )
                     return False
             except requests.exceptions.RequestException:
                 print("✗ Servidor InfluxDB origen no disponible")
@@ -92,7 +101,9 @@ class TestRunner:
                 if response.status_code == 200:
                     print("✓ Servidor InfluxDB destino disponible")
                 else:
-                    print("✗ Servidor InfluxDB destino no responde correctamente")
+                    print(
+                        "✗ Servidor InfluxDB destino no responde correctamente"
+                    )
                     return False
             except requests.exceptions.RequestException:
                 print("✗ Servidor InfluxDB destino no disponible")
@@ -113,30 +124,132 @@ class TestRunner:
         """
         print("\n🧪 Ejecutando tests unitarios...")
 
+        # Crear directorio de resultados
+        results_dir = self.project_root / "test_results"
+        results_dir.mkdir(exist_ok=True)
+
         cmd = [
-            'python', '-m', 'pytest',
-            str(self.test_root / 'unit'),
-            '-v',
-            '--tb=short',
-            '--json-report',
-            '--json-report-file=test_results/unit_tests.json'
+            "python",
+            "-m",
+            "pytest",
+            str(self.test_root / "unit"),
+            "-v",
+            "--tb=short",
+            "--json-report",
+            "--json-report-file=test_results/unit_tests.json",
         ]
 
         if self.verbose:
-            cmd.append('-s')
+            cmd.append("-s")
 
         start_time = time.time()
-        result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+        result = subprocess.run(cmd, cwd=self.project_root, text=True)
         end_time = time.time()
 
+        # Si hay fallos, mostrar información detallada
+        if result.returncode != 0:
+            self._show_unit_test_failures()
+
         return {
-            'type': 'unit',
-            'success': result.returncode == 0,
-            'duration': end_time - start_time,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode
+            "type": "unit",
+            "success": result.returncode == 0,
+            "duration": end_time - start_time,
+            "stdout": "",
+            "stderr": "",
+            "returncode": result.returncode,
         }
+
+    def _show_unit_test_failures(self) -> None:
+        """
+        Muestra información detallada de los tests unitarios que fallaron.
+        """
+        json_file = self.project_root / "test_results" / "unit_tests.json"
+
+        if not json_file.exists():
+            print("❌ No se pudo encontrar el archivo de resultados JSON")
+            return
+
+        try:
+            with open(json_file, "r") as f:
+                data = json.load(f)
+
+            # Mostrar resumen
+            summary = data.get("summary", {})
+            total = summary.get("total", 0)
+            passed = summary.get("passed", 0)
+            failed = summary.get("failed", 0)
+
+            print(f"\n{'='*80}")
+            print(f"📊 RESUMEN DE TESTS UNITARIOS")
+            print(f"{'='*80}")
+            print(
+                f"Total: {total} | ✅ Pasaron: {passed} | ❌ Fallaron: {failed}"
+            )
+
+            if failed > 0:
+                print(f"\n🔍 DETALLES DE TESTS FALLIDOS:")
+                print(f"{'='*80}")
+
+                # Obtener tests fallidos
+                failed_tests = [
+                    test
+                    for test in data.get("tests", [])
+                    if test.get("outcome") == "failed"
+                ]
+
+                for i, test in enumerate(failed_tests, 1):
+                    node_id = test.get("nodeid", "Test desconocido")
+                    # Extraer nombre del test más legible
+                    test_name = (
+                        node_id.split("::")[-1] if "::" in node_id else node_id
+                    )
+                    test_file = (
+                        node_id.split("::")[0]
+                        if "::" in node_id
+                        else "Archivo desconocido"
+                    )
+
+                    print(f"\n{i}. ❌ {test_name}")
+                    print(f"   📁 Archivo: {test_file}")
+
+                    # Mostrar el error principal
+                    crash = test.get("call", {}).get("crash", {})
+                    if crash:
+                        error_msg = crash.get("message", "Error desconocido")
+                        print(f"   💥 Error: {error_msg}")
+
+                        # Mostrar traceback simplificado
+                        traceback = crash.get("traceback", [])
+                        if traceback:
+                            print(f"   📍 Ubicación del error:")
+                            for trace in traceback[
+                                -3:
+                            ]:  # Solo últimas 3 líneas del traceback
+                                path = trace.get("path", "")
+                                lineno = trace.get("lineno", "")
+                                message = trace.get("message", "")
+                                if path and lineno:
+                                    print(
+                                        f"      → {path}:{lineno} - {message}"
+                                    )
+
+                    # Mostrar logs si existen
+                    logs = test.get("call", {}).get("log", [])
+                    if logs:
+                        print(f"   📋 Logs:")
+                        for log in logs[-2:]:  # Solo últimos 2 logs
+                            msg = log.get("msg", "")
+                            level = log.get("levelname", "INFO")
+                            if msg:
+                                print(f"      [{level}] {msg}")
+
+                print(f"\n{'='*80}")
+                print(f"💡 Para ver más detalles, ejecuta:")
+                print(f"   python -m pytest test/unit -v --tb=long")
+                print(f"   O revisa el archivo: test_results/unit_tests.json")
+
+        except Exception as e:
+            print(f"❌ Error leyendo resultados: {e}")
 
     def run_integration_tests(self) -> dict:
         """
@@ -148,29 +261,34 @@ class TestRunner:
         print("\n🔗 Ejecutando tests de integración...")
 
         cmd = [
-            'python', '-m', 'pytest',
-            str(self.test_root / 'integration'),
-            '-v',
-            '--tb=short',
-            '-m', 'integration',
-            '--json-report',
-            '--json-report-file=test_results/integration_tests.json'
+            "python",
+            "-m",
+            "pytest",
+            str(self.test_root / "integration"),
+            "-v",
+            "--tb=short",
+            "-m",
+            "integration",
+            "--json-report",
+            "--json-report-file=test_results/integration_tests.json",
         ]
 
         if self.verbose:
-            cmd.append('-s')
+            cmd.append("-s")
 
         start_time = time.time()
-        result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, cwd=self.project_root, capture_output=True, text=True
+        )
         end_time = time.time()
 
         return {
-            'type': 'integration',
-            'success': result.returncode == 0,
-            'duration': end_time - start_time,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode
+            "type": "integration",
+            "success": result.returncode == 0,
+            "duration": end_time - start_time,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
         }
 
     def run_docker_tests(self) -> dict:
@@ -183,29 +301,34 @@ class TestRunner:
         print("\n🐳 Ejecutando tests con Docker...")
 
         cmd = [
-            'python', '-m', 'pytest',
-            str(self.test_root / 'integration'),
-            '-v',
-            '--tb=short',
-            '-m', 'docker',
-            '--json-report',
-            '--json-report-file=test_results/docker_tests.json'
+            "python",
+            "-m",
+            "pytest",
+            str(self.test_root / "integration"),
+            "-v",
+            "--tb=short",
+            "-m",
+            "docker",
+            "--json-report",
+            "--json-report-file=test_results/docker_tests.json",
         ]
 
         if self.verbose:
-            cmd.append('-s')
+            cmd.append("-s")
 
         start_time = time.time()
-        result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, cwd=self.project_root, capture_output=True, text=True
+        )
         end_time = time.time()
 
         return {
-            'type': 'docker',
-            'success': result.returncode == 0,
-            'duration': end_time - start_time,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode
+            "type": "docker",
+            "success": result.returncode == 0,
+            "duration": end_time - start_time,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
         }
 
     def run_performance_tests(self) -> dict:
@@ -218,29 +341,34 @@ class TestRunner:
         print("\n⚡ Ejecutando tests de rendimiento...")
 
         cmd = [
-            'python', '-m', 'pytest',
-            str(self.test_root / 'integration'),
-            '-v',
-            '--tb=short',
-            '-k', 'performance',
-            '--json-report',
-            '--json-report-file=test_results/performance_tests.json'
+            "python",
+            "-m",
+            "pytest",
+            str(self.test_root / "integration"),
+            "-v",
+            "--tb=short",
+            "-k",
+            "performance",
+            "--json-report",
+            "--json-report-file=test_results/performance_tests.json",
         ]
 
         if self.verbose:
-            cmd.append('-s')
+            cmd.append("-s")
 
         start_time = time.time()
-        result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, cwd=self.project_root, capture_output=True, text=True
+        )
         end_time = time.time()
 
         return {
-            'type': 'performance',
-            'success': result.returncode == 0,
-            'duration': end_time - start_time,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode
+            "type": "performance",
+            "success": result.returncode == 0,
+            "duration": end_time - start_time,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
         }
 
     def generate_coverage_report(self) -> dict:
@@ -253,25 +381,29 @@ class TestRunner:
         print("\n📊 Generando reporte de cobertura...")
 
         cmd = [
-            'python', '-m', 'pytest',
-            str(self.test_root / 'unit'),
-            '--cov=src',
-            '--cov-report=html:test_results/coverage_html',
-            '--cov-report=json:test_results/coverage.json',
-            '--cov-report=term'
+            "python",
+            "-m",
+            "pytest",
+            str(self.test_root / "unit"),
+            "--cov=src",
+            "--cov-report=html:test_results/coverage_html",
+            "--cov-report=json:test_results/coverage.json",
+            "--cov-report=term",
         ]
 
         start_time = time.time()
-        result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, cwd=self.project_root, capture_output=True, text=True
+        )
         end_time = time.time()
 
         return {
-            'type': 'coverage',
-            'success': result.returncode == 0,
-            'duration': end_time - start_time,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode
+            "type": "coverage",
+            "success": result.returncode == 0,
+            "duration": end_time - start_time,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
         }
 
     def create_test_data_demo(self) -> dict:
@@ -284,10 +416,10 @@ class TestRunner:
         print("\n📊 Creando datos de demostración...")
 
         try:
+            import json
+            import tempfile
             from test.data.data_generator import DataGenerator
             from test.data.test_datasets import get_available_datasets
-            import tempfile
-            import json
 
             generator = DataGenerator(seed=42)
 
@@ -307,28 +439,31 @@ class TestRunner:
 
                 try:
                     from test.data.test_datasets import get_dataset_config
+
                     dataset_config = get_dataset_config(dataset_name)
 
                     # Reducir intervalos para generar menos datos
                     for measurement_config in dataset_config.values():
-                        measurement_config['interval'] = '5m'  # 5 minutos
+                        measurement_config["interval"] = "5m"  # 5 minutos
 
                     dataset = generator.generate_complex_dataset(
                         database_name=f"demo_{dataset_name}",
                         start_time=start_time,
                         end_time=end_time,
-                        measurements=dataset_config
+                        measurements=dataset_config,
                     )
 
                     # Guardar información del dataset
                     datasets_info[dataset_name] = {
-                        'description': description,
-                        'measurements': list(dataset.keys()),
-                        'total_records': sum(len(records) for records in dataset.values()),
-                        'time_range': {
-                            'start': start_time.isoformat(),
-                            'end': end_time.isoformat()
-                        }
+                        "description": description,
+                        "measurements": list(dataset.keys()),
+                        "total_records": sum(
+                            len(records) for records in dataset.values()
+                        ),
+                        "time_range": {
+                            "start": start_time.isoformat(),
+                            "end": end_time.isoformat(),
+                        },
                     }
 
                     # Guardar datos de muestra (primeros 10 registros de cada medición)
@@ -338,36 +473,32 @@ class TestRunner:
 
                     # Guardar en archivo JSON
                     sample_file = demo_dir / f"{dataset_name}_sample.json"
-                    with open(sample_file, 'w') as f:
+                    with open(sample_file, "w") as f:
                         json.dump(sample_data, f, indent=2, default=str)
 
                 except Exception as e:
                     print(f"    Error generando {dataset_name}: {e}")
                     datasets_info[dataset_name] = {
-                        'description': description,
-                        'error': str(e)
+                        "description": description,
+                        "error": str(e),
                     }
 
             # Guardar resumen
             summary_file = demo_dir / "datasets_summary.json"
-            with open(summary_file, 'w') as f:
+            with open(summary_file, "w") as f:
                 json.dump(datasets_info, f, indent=2)
 
             print(f"  Datos de demo guardados en: {demo_dir}")
 
             return {
-                'type': 'demo_data',
-                'success': True,
-                'datasets': len(datasets_info),
-                'location': str(demo_dir)
+                "type": "demo_data",
+                "success": True,
+                "datasets": len(datasets_info),
+                "location": str(demo_dir),
             }
 
         except Exception as e:
-            return {
-                'type': 'demo_data',
-                'success': False,
-                'error': str(e)
-            }
+            return {"type": "demo_data", "success": False, "error": str(e)}
 
     def generate_final_report(self, results: list) -> None:
         """
@@ -384,31 +515,33 @@ class TestRunner:
 
         # Calcular estadísticas
         total_tests = len(results)
-        successful_tests = sum(1 for r in results if r['success'])
-        total_duration = sum(r.get('duration', 0) for r in results)
+        successful_tests = sum(1 for r in results if r["success"])
+        total_duration = sum(r.get("duration", 0) for r in results)
 
         # Crear reporte
         report = {
-            'timestamp': datetime.now().isoformat(),
-            'summary': {
-                'total_tests': total_tests,
-                'successful_tests': successful_tests,
-                'failed_tests': total_tests - successful_tests,
-                'success_rate': successful_tests / total_tests if total_tests > 0 else 0,
-                'total_duration': total_duration
+            "timestamp": datetime.now().isoformat(),
+            "summary": {
+                "total_tests": total_tests,
+                "successful_tests": successful_tests,
+                "failed_tests": total_tests - successful_tests,
+                "success_rate": (
+                    successful_tests / total_tests if total_tests > 0 else 0
+                ),
+                "total_duration": total_duration,
             },
-            'results': results
+            "results": results,
         }
 
         # Guardar reporte JSON
         report_file = results_dir / "test_report.json"
-        with open(report_file, 'w') as f:
+        with open(report_file, "w") as f:
             json.dump(report, f, indent=2)
 
         # Generar reporte HTML simple
         html_report = self._generate_html_report(report)
         html_file = results_dir / "test_report.html"
-        with open(html_file, 'w') as f:
+        with open(html_file, "w") as f:
             f.write(html_report)
 
         # Mostrar resumen
@@ -480,9 +613,9 @@ class TestRunner:
     <h2>Resultados Detallados</h2>
 """
 
-        for result in report['results']:
-            status_class = 'success' if result['success'] else 'failure'
-            status_icon = '✅' if result['success'] else '❌'
+        for result in report["results"]:
+            status_class = "success" if result["success"] else "failure"
+            status_icon = "✅" if result["success"] else "❌"
 
             html += f"""
     <div class="result {status_class}">
@@ -491,7 +624,7 @@ class TestRunner:
         <p><strong>Estado:</strong> {'Exitoso' if result['success'] else 'Fallido'}</p>
 """
 
-            if not result['success'] and result.get('stderr'):
+            if not result["success"] and result.get("stderr"):
                 html += f"<details><summary>Ver errores</summary><pre>{result['stderr']}</pre></details>"
 
             html += "</div>"
@@ -502,7 +635,9 @@ class TestRunner:
 """
         return html
 
-    def run_all_tests(self, include_docker: bool = True, include_performance: bool = True) -> None:
+    def run_all_tests(
+        self, include_docker: bool = True, include_performance: bool = True
+    ) -> None:
         """
         Ejecuta todos los tests del sistema.
 
@@ -519,7 +654,7 @@ class TestRunner:
             sys.exit(1)
 
         # Crear directorio de resultados
-        results_dir = self.project_root / "test_results"
+        results_dir = self.project_root / "test/test_results"
         results_dir.mkdir(exist_ok=True)
 
         results = []
@@ -539,9 +674,13 @@ class TestRunner:
                 if include_performance:
                     results.append(self.run_performance_tests())
             else:
-                print("\n⚠️  Servicios Docker no disponibles, omitiendo tests de integración")
+                print(
+                    "\n⚠️  Servicios Docker no disponibles, omitiendo tests de integración"
+                )
                 print("   Para ejecutar tests de integración:")
-                print("   docker-compose -f test/docker/docker-compose.test.yml up -d")
+                print(
+                    "   docker-compose -f test/docker/docker-compose.test.yml up -d"
+                )
 
         # 4. Reporte de cobertura
         results.append(self.generate_coverage_report())
@@ -550,7 +689,7 @@ class TestRunner:
         self.generate_final_report(results)
 
         # Determinar código de salida
-        failed_tests = [r for r in results if not r['success']]
+        failed_tests = [r for r in results if not r["success"]]
         if failed_tests:
             print(f"\n❌ {len(failed_tests)} tipos de tests fallaron")
             sys.exit(1)
@@ -560,12 +699,30 @@ class TestRunner:
 
 def main():
     """Función principal."""
-    parser = argparse.ArgumentParser(description="Ejecutor de tests para InfluxDB Backup Toolkit")
-    parser.add_argument('-v', '--verbose', action='store_true', help="Output verbose")
-    parser.add_argument('--unit-only', action='store_true', help="Solo tests unitarios")
-    parser.add_argument('--no-docker', action='store_true', help="Omitir tests que requieren Docker")
-    parser.add_argument('--no-performance', action='store_true', help="Omitir tests de rendimiento")
-    parser.add_argument('--demo-data-only', action='store_true', help="Solo generar datos de demostración")
+    parser = argparse.ArgumentParser(
+        description="Ejecutor de tests para InfluxDB Backup Toolkit"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Output verbose"
+    )
+    parser.add_argument(
+        "--unit-only", action="store_true", help="Solo tests unitarios"
+    )
+    parser.add_argument(
+        "--no-docker",
+        action="store_true",
+        help="Omitir tests que requieren Docker",
+    )
+    parser.add_argument(
+        "--no-performance",
+        action="store_true",
+        help="Omitir tests de rendimiento",
+    )
+    parser.add_argument(
+        "--demo-data-only",
+        action="store_true",
+        help="Solo generar datos de demostración",
+    )
 
     args = parser.parse_args()
 
@@ -573,27 +730,39 @@ def main():
 
     if args.demo_data_only:
         result = runner.create_test_data_demo()
-        if result['success']:
+        if result["success"]:
             print(f"✅ Datos de demostración creados en: {result['location']}")
         else:
-            print(f"❌ Error creando datos de demostración: {result.get('error', 'Error desconocido')}")
+            print(
+                f"❌ Error creando datos de demostración: {result.get('error', 'Error desconocido')}"
+            )
         return
 
     if args.unit_only:
+        print("🚀 Ejecutando solo tests unitarios...")
         result = runner.run_unit_tests()
-        if result['success']:
-            print("✅ Tests unitarios completados")
+
+        print(f"\n{'='*60}")
+        if result["success"]:
+            print("✅ TESTS UNITARIOS COMPLETADOS EXITOSAMENTE")
+            print(f"⏱️  Duración: {result['duration']:.2f} segundos")
         else:
-            print("❌ Tests unitarios fallaron")
+            print("❌ TESTS UNITARIOS FALLARON")
+            print(f"⏱️  Duración: {result['duration']:.2f} segundos")
+            print("\n💡 Los detalles de los errores se muestran arriba.")
+            print(
+                "   Para más información usa: python -m pytest test/unit -v --tb=long"
+            )
             sys.exit(1)
+        print(f"{'='*60}")
         return
 
     # Ejecutar todos los tests
     runner.run_all_tests(
         include_docker=not args.no_docker,
-        include_performance=not args.no_performance
+        include_performance=not args.no_performance,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

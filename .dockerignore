@@ -1,0 +1,55 @@
+# Excluir volúmenes de datos (no necesarios para build)
+volumes/
+!volumes/.gitkeep
+
+# Excluir archivos de git
+.git/
+.gitignore
+
+# Excluir archivos de desarrollo local
+*.log
+*.tmp
+.env
+.env.local
+
+# Excluir archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Excluir archivos de testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Excluir archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Excluir archivos temporales
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Excluir documentación local
+docs/_build/
+site/
+
+# Excluir archivos de sistema
+.DS_Store
+Thumbs.db

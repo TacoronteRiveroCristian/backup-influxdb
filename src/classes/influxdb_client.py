@@ -11,39 +11,49 @@ Cliente que maneja todas las operaciones con InfluxDB 1.8 incluyendo:
 - Manejo de errores y reintentos
 """
 
-import requests
-import time
 import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Union
-from urllib.parse import urlencode
 import logging
+import time
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple, Union
+from urllib.parse import urlencode
+
+import requests
 
 from ..utils import (
-    retry_with_backoff, escape_influxdb_identifier,
-    build_influxdb_line_protocol, classify_influxdb_type,
-    generate_time_ranges, format_influxdb_time, parse_influxdb_time,
-    parse_duration, chunks
+    build_influxdb_line_protocol,
+    chunks,
+    classify_influxdb_type,
+    escape_influxdb_identifier,
+    format_influxdb_time,
+    generate_time_ranges,
+    parse_duration,
+    parse_influxdb_time,
+    retry_with_backoff,
 )
 
 
 class InfluxDBError(Exception):
     """Excepción base para errores de InfluxDB"""
+
     pass
 
 
 class InfluxDBConnectionError(InfluxDBError):
     """Error de conexión a InfluxDB"""
+
     pass
 
 
 class InfluxDBQueryError(InfluxDBError):
     """Error en consultas de InfluxDB"""
+
     pass
 
 
 class InfluxDBWriteError(InfluxDBError):
     """Error en escritura a InfluxDB"""
+
     pass
 
 
@@ -55,10 +65,17 @@ class InfluxDBClient:
     escritura, gestión de bases de datos y metadatos.
     """
 
-    def __init__(self, url: str, username: str = None, password: str = None,
-                 ssl_verify: bool = True, timeout: int = 30,
-                 max_retries: int = 3, retry_delay: float = 1.0,
-                 logger: logging.Logger = None):
+    def __init__(
+        self,
+        url: str,
+        username: str = None,
+        password: str = None,
+        ssl_verify: bool = True,
+        timeout: int = 30,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        logger: logging.Logger = None,
+    ):
         """
         Inicializa el cliente de InfluxDB.
 
@@ -72,7 +89,7 @@ class InfluxDBClient:
             retry_delay: Delay entre reintentos
             logger: Logger para mensajes
         """
-        self.url = url.rstrip('/')
+        self.url = url.rstrip("/")
         self.username = username
         self.password = password
         self.ssl_verify = ssl_verify
@@ -89,6 +106,45 @@ class InfluxDBClient:
         if username and password:
             self.session.auth = (username, password)
 
+    def _convert_timestamp(self, timestamp_value) -> Optional[datetime]:
+        """
+        Convierte un timestamp de InfluxDB a datetime.
+
+        Maneja tanto timestamps en nanosegundos (int/float) como
+        cadenas en formato ISO (para compatibilidad con tests).
+
+        Args:
+            timestamp_value: Timestamp en formato ns o string ISO
+
+        Returns:
+            datetime: Objeto datetime o None si no se puede convertir
+        """
+        if timestamp_value is None:
+            return None
+
+        try:
+            # Si es un número (nanosegundos desde epoch)
+            if isinstance(timestamp_value, (int, float)):
+                return datetime.fromtimestamp(timestamp_value / 1_000_000_000)
+
+            # Si es una cadena, intentar parsear como ISO
+            elif isinstance(timestamp_value, str):
+                # Remover Z si existe y reemplazar con +00:00
+                iso_string = timestamp_value.replace("Z", "+00:00")
+                return datetime.fromisoformat(iso_string).replace(tzinfo=None)
+
+            else:
+                self.logger.warning(
+                    f"Formato de timestamp no reconocido: {type(timestamp_value)} - {timestamp_value}"
+                )
+                return None
+
+        except (ValueError, TypeError, OSError) as e:
+            self.logger.warning(
+                f"Error convirtiendo timestamp {timestamp_value}: {e}"
+            )
+            return None
+
     def _build_query_url(self, params: Dict[str, Any]) -> str:
         """
         Construye la URL de consulta con parámetros.
@@ -102,7 +158,7 @@ class InfluxDBClient:
         query_string = urlencode(params)
         return f"{self.url}/query?{query_string}"
 
-    def _build_write_url(self, database: str, precision: str = 'ns') -> str:
+    def _build_write_url(self, database: str, precision: str = "ns") -> str:
         """
         Construye la URL de escritura.
 
@@ -113,13 +169,14 @@ class InfluxDBClient:
         Returns:
             str: URL de escritura
         """
-        params = {'db': database, 'precision': precision}
+        params = {"db": database, "precision": precision}
         query_string = urlencode(params)
         return f"{self.url}/write?{query_string}"
 
     @retry_with_backoff(max_retries=3, retry_delay=1.0)
-    def _execute_query(self, query: str, database: str = None,
-                      epoch: str = None) -> Dict[str, Any]:
+    def _execute_query(
+        self, query: str, database: str = None, epoch: str = None
+    ) -> Dict[str, Any]:
         """
         Ejecuta una consulta contra InfluxDB.
 
@@ -134,25 +191,27 @@ class InfluxDBClient:
         Raises:
             InfluxDBQueryError: Si la consulta falla
         """
-        params = {'q': query}
+        params = {"q": query}
 
         if database:
-            params['db'] = database
+            params["db"] = database
 
         if epoch:
-            params['epoch'] = epoch
+            params["epoch"] = epoch
 
         try:
             url = self._build_query_url(params)
             response = self.session.get(url, timeout=self.timeout)
 
             if response.status_code != 200:
-                raise InfluxDBQueryError(f"Query failed with status {response.status_code}: {response.text}")
+                raise InfluxDBQueryError(
+                    f"Query failed with status {response.status_code}: {response.text}"
+                )
 
             result = response.json()
 
             # Verificar si hay errores en la respuesta
-            if 'error' in result:
+            if "error" in result:
                 raise InfluxDBQueryError(f"Query error: {result['error']}")
 
             return result
@@ -163,7 +222,9 @@ class InfluxDBClient:
             raise InfluxDBQueryError(f"Invalid JSON response: {e}")
 
     @retry_with_backoff(max_retries=3, retry_delay=1.0)
-    def _execute_write(self, database: str, data: str, precision: str = 'ns') -> bool:
+    def _execute_write(
+        self, database: str, data: str, precision: str = "ns"
+    ) -> bool:
         """
         Ejecuta una escritura contra InfluxDB.
 
@@ -181,19 +242,21 @@ class InfluxDBClient:
         try:
             url = self._build_write_url(database, precision)
 
-            headers = {'Content-Type': 'application/octet-stream'}
+            headers = {"Content-Type": "application/octet-stream"}
 
             response = self.session.post(
                 url,
-                data=data.encode('utf-8'),
+                data=data.encode("utf-8"),
                 headers=headers,
-                timeout=self.timeout
+                timeout=self.timeout,
             )
 
             if response.status_code == 204:
                 return True
             else:
-                raise InfluxDBWriteError(f"Write failed with status {response.status_code}: {response.text}")
+                raise InfluxDBWriteError(
+                    f"Write failed with status {response.status_code}: {response.text}"
+                )
 
         except requests.exceptions.RequestException as e:
             raise InfluxDBConnectionError(f"Connection failed: {e}")
@@ -207,7 +270,7 @@ class InfluxDBClient:
         """
         try:
             result = self._execute_query("SHOW DATABASES")
-            return 'results' in result
+            return "results" in result
         except Exception as e:
             self.logger.error(f"Connection test failed: {e}")
             return False
@@ -247,10 +310,10 @@ class InfluxDBClient:
         try:
             result = self._execute_query("SHOW DATABASES")
 
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
                 if series:
-                    databases = [row[0] for row in series[0].get('values', [])]
+                    databases = [row[0] for row in series[0].get("values", [])]
                     return database in databases
 
             return False
@@ -270,13 +333,13 @@ class InfluxDBClient:
             result = self._execute_query("SHOW DATABASES")
 
             databases = []
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
                 if series:
-                    databases = [row[0] for row in series[0].get('values', [])]
+                    databases = [row[0] for row in series[0].get("values", [])]
 
             # Filtrar bases de datos del sistema
-            return [db for db in databases if not db.startswith('_')]
+            return [db for db in databases if not db.startswith("_")]
 
         except Exception as e:
             self.logger.error(f"Failed to get databases: {e}")
@@ -296,15 +359,19 @@ class InfluxDBClient:
             result = self._execute_query("SHOW MEASUREMENTS", database)
 
             measurements = []
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
                 if series:
-                    measurements = [row[0] for row in series[0].get('values', [])]
+                    measurements = [
+                        row[0] for row in series[0].get("values", [])
+                    ]
 
             return measurements
 
         except Exception as e:
-            self.logger.error(f"Failed to get measurements from {database}: {e}")
+            self.logger.error(
+                f"Failed to get measurements from {database}: {e}"
+            )
             return []
 
     def get_field_keys(self, database: str, measurement: str) -> Dict[str, str]:
@@ -325,27 +392,31 @@ class InfluxDBClient:
             result = self._execute_query(query, database)
 
             fields = {}
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
                 if series:
-                    values = series[0].get('values', [])
+                    values = series[0].get("values", [])
                     for row in values:
                         field_name, field_type = row[0], row[1]
 
-                        # Mapear tipos de InfluxDB a nuestros tipos
-                        if field_type in ['float', 'integer']:
-                            fields[field_name] = 'numeric'
-                        elif field_type == 'string':
-                            fields[field_name] = 'string'
-                        elif field_type == 'boolean':
-                            fields[field_name] = 'boolean'
+                        # Preservar tipos originales de InfluxDB
+                        if field_type == "float":
+                            fields[field_name] = "float"
+                        elif field_type == "integer":
+                            fields[field_name] = "integer"
+                        elif field_type == "string":
+                            fields[field_name] = "string"
+                        elif field_type == "boolean":
+                            fields[field_name] = "boolean"
                         else:
-                            fields[field_name] = 'string'
+                            fields[field_name] = "string"
 
             return fields
 
         except Exception as e:
-            self.logger.error(f"Failed to get field keys from {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to get field keys from {database}.{measurement}: {e}"
+            )
             return {}
 
     def get_tag_keys(self, database: str, measurement: str) -> List[str]:
@@ -366,19 +437,23 @@ class InfluxDBClient:
             result = self._execute_query(query, database)
 
             tags = []
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
                 if series:
-                    values = series[0].get('values', [])
+                    values = series[0].get("values", [])
                     tags = [row[0] for row in values]
 
             return tags
 
         except Exception as e:
-            self.logger.error(f"Failed to get tag keys from {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to get tag keys from {database}.{measurement}: {e}"
+            )
             return []
 
-    def get_last_timestamp(self, database: str, measurement: str) -> Optional[datetime]:
+    def get_last_timestamp(
+        self, database: str, measurement: str
+    ) -> Optional[datetime]:
         """
         Obtiene el último timestamp de una medición.
 
@@ -393,22 +468,26 @@ class InfluxDBClient:
             escaped_measurement = escape_influxdb_identifier(measurement)
             query = f"SELECT * FROM {escaped_measurement} ORDER BY time DESC LIMIT 1"
 
-            result = self._execute_query(query, database, epoch='ns')
+            result = self._execute_query(query, database, epoch="ns")
 
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
-                if series and series[0].get('values'):
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
+                if series and series[0].get("values"):
                     # El primer valor es el timestamp
-                    timestamp_ns = series[0]['values'][0][0]
-                    return datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+                    timestamp_value = series[0]["values"][0][0]
+                    return self._convert_timestamp(timestamp_value)
 
             return None
 
         except Exception as e:
-            self.logger.error(f"Failed to get last timestamp from {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to get last timestamp from {database}.{measurement}: {e}"
+            )
             return None
 
-    def get_field_last_timestamp(self, database: str, measurement: str, field: str) -> Optional[datetime]:
+    def get_field_last_timestamp(
+        self, database: str, measurement: str, field: str
+    ) -> Optional[datetime]:
         """
         Obtiene el último timestamp de un campo específico.
 
@@ -433,54 +512,79 @@ class InfluxDBClient:
             # Esta es la más confiable porque no depende de valores NULL
             query = f"SELECT {escaped_field} FROM {escaped_measurement} ORDER BY time DESC LIMIT 1"
 
-            result = self._execute_query(query, database, epoch='ns')
+            result = self._execute_query(query, database, epoch="ns")
 
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    timestamp_ns = series[0]['values'][0][0]
-                    timestamp = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
-                    self.logger.debug(f"Found last timestamp for field {field}: {timestamp} (strategy 1)")
-                    return timestamp
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    timestamp_value = series[0]["values"][0][0]
+                    timestamp = self._convert_timestamp(timestamp_value)
+                    if timestamp:
+                        self.logger.debug(
+                            f"Found last timestamp for field {field}: {timestamp} (strategy 1)"
+                        )
+                        return timestamp
 
             # Estrategia 2: Fallback con filtro IS NOT NULL
-            self.logger.debug(f"Strategy 1 failed for field {field}, trying strategy 2 with IS NOT NULL filter")
+            self.logger.debug(
+                f"Strategy 1 failed for field {field}, trying strategy 2 with IS NOT NULL filter"
+            )
             query_with_filter = f"SELECT {escaped_field} FROM {escaped_measurement} WHERE {escaped_field} IS NOT NULL ORDER BY time DESC LIMIT 1"
 
-            result = self._execute_query(query_with_filter, database, epoch='ns')
+            result = self._execute_query(
+                query_with_filter, database, epoch="ns"
+            )
 
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    timestamp_ns = series[0]['values'][0][0]
-                    timestamp = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
-                    self.logger.debug(f"Found last timestamp for field {field}: {timestamp} (strategy 2)")
-                    return timestamp
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    timestamp_value = series[0]["values"][0][0]
+                    timestamp = self._convert_timestamp(timestamp_value)
+                    if timestamp:
+                        self.logger.debug(
+                            f"Found last timestamp for field {field}: {timestamp} (strategy 2)"
+                        )
+                        return timestamp
 
             # Estrategia 3: Verificar si hay datos usando COUNT
-            self.logger.debug(f"Strategy 2 failed for field {field}, checking if any data exists with COUNT")
-            count_query = f"SELECT COUNT({escaped_field}) FROM {escaped_measurement}"
+            self.logger.debug(
+                f"Strategy 2 failed for field {field}, checking if any data exists with COUNT"
+            )
+            count_query = (
+                f"SELECT COUNT({escaped_field}) FROM {escaped_measurement}"
+            )
             count_result = self._execute_query(count_query, database)
 
-            if 'results' in count_result and count_result['results']:
-                series = count_result['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    count = series[0]['values'][0][1]
+            if "results" in count_result and count_result["results"]:
+                series = count_result["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    count = series[0]["values"][0][1]
                     if count > 0:
-                        self.logger.debug(f"Field {field} has {count} records but timestamp detection failed")
+                        self.logger.debug(
+                            f"Field {field} has {count} records but timestamp detection failed"
+                        )
                     else:
                         self.logger.debug(f"Field {field} has no records")
 
             return None
 
         except Exception as e:
-            self.logger.debug(f"Failed to get last timestamp for field {field}: {e}")
+            self.logger.debug(
+                f"Failed to get last timestamp for field {field}: {e}"
+            )
             return None
 
-    def query_data(self, database: str, measurement: str,
-                  start_time: datetime, end_time: datetime,
-                  fields: List[str] = None, tags: List[str] = None,
-                  group_by: str = None, limit: int = None) -> List[Dict[str, Any]]:
+    def query_data(
+        self,
+        database: str,
+        measurement: str,
+        start_time: datetime,
+        end_time: datetime,
+        fields: List[str] = None,
+        tags: List[str] = None,
+        group_by: str = None,
+        limit: int = None,
+    ) -> List[Dict[str, Any]]:
         """
         Consulta datos de una medición en un rango de tiempo.
 
@@ -505,12 +609,16 @@ class InfluxDBClient:
             if fields or tags:
                 select_fields = []
                 if fields:
-                    select_fields.extend([escape_influxdb_identifier(f) for f in fields])
+                    select_fields.extend(
+                        [escape_influxdb_identifier(f) for f in fields]
+                    )
                 if tags:
-                    select_fields.extend([escape_influxdb_identifier(t) for t in tags])
-                select_clause = ', '.join(select_fields)
+                    select_fields.extend(
+                        [escape_influxdb_identifier(t) for t in tags]
+                    )
+                select_clause = ", ".join(select_fields)
             else:
-                select_clause = '*'
+                select_clause = "*"
 
             # Construir consulta base
             query = f"SELECT {select_clause} FROM {escaped_measurement}"
@@ -529,28 +637,29 @@ class InfluxDBClient:
                 query += f" LIMIT {limit}"
 
             # Ejecutar consulta
-            result = self._execute_query(query, database, epoch='ns')
+            result = self._execute_query(query, database, epoch="ns")
 
             # Procesar resultados
             records = []
-            if 'results' in result and result['results']:
-                series_list = result['results'][0].get('series', [])
+            if "results" in result and result["results"]:
+                series_list = result["results"][0].get("series", [])
 
                 for series in series_list:
-                    columns = series.get('columns', [])
-                    values = series.get('values', [])
-                    tags_data = series.get('tags', {})
+                    columns = series.get("columns", [])
+                    values = series.get("values", [])
+                    tags_data = series.get("tags", {})
 
                     for row in values:
                         record = {}
 
                         # Procesar columnas
                         for i, column in enumerate(columns):
-                            if column == 'time':
-                                # Convertir timestamp
-                                timestamp_ns = row[i]
-                                if timestamp_ns:
-                                    record['time'] = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+                            if column == "time":
+                                # Convertir timestamp usando función helper
+                                timestamp_value = row[i]
+                                record["time"] = self._convert_timestamp(
+                                    timestamp_value
+                                )
                             else:
                                 record[column] = row[i]
 
@@ -563,11 +672,18 @@ class InfluxDBClient:
             return records
 
         except Exception as e:
-            self.logger.error(f"Failed to query data from {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to query data from {database}.{measurement}: {e}"
+            )
             return []
 
-    def write_data(self, database: str, measurement: str,
-                  records: List[Dict[str, Any]], batch_size: int = 1000) -> bool:
+    def write_data(
+        self,
+        database: str,
+        measurement: str,
+        records: List[Dict[str, Any]],
+        batch_size: int = 1000,
+    ) -> bool:
         """
         Escribe datos usando Line Protocol.
 
@@ -579,6 +695,9 @@ class InfluxDBClient:
 
         Returns:
             bool: True si fue exitoso
+
+        Raises:
+            InfluxDBWriteError: Si la escritura falla
         """
         try:
             if not records:
@@ -592,12 +711,14 @@ class InfluxDBClient:
 
                 for record in batch:
                     # Separar timestamp, fields y tags
-                    timestamp = record.get('time')
+                    timestamp = record.get("time")
                     timestamp_ns = None
 
                     if timestamp:
                         if isinstance(timestamp, datetime):
-                            timestamp_ns = int(timestamp.timestamp() * 1_000_000_000)
+                            timestamp_ns = int(
+                                timestamp.timestamp() * 1_000_000_000
+                            )
                         else:
                             timestamp_ns = int(timestamp)
 
@@ -606,7 +727,7 @@ class InfluxDBClient:
                     tags = {}
 
                     for key, value in record.items():
-                        if key == 'time':
+                        if key == "time":
                             continue
 
                         if value is None:
@@ -614,7 +735,7 @@ class InfluxDBClient:
 
                         # Determinar si es tag o field
                         # Tags son strings, fields pueden ser cualquier tipo
-                        if isinstance(value, str) and not key.startswith('_'):
+                        if isinstance(value, str) and not key.startswith("_"):
                             tags[key] = value
                         else:
                             fields[key] = value
@@ -628,22 +749,39 @@ class InfluxDBClient:
 
                 # Escribir lote
                 if lines:
-                    line_protocol = '\n'.join(lines)
+                    line_protocol = "\n".join(lines)
+                    # Propagar excepciones directamente en lugar de capturarlas
                     success = self._execute_write(database, line_protocol)
 
                     if not success:
                         return False
 
-                    self.logger.debug(f"Wrote {len(lines)} lines to {database}.{measurement}")
+                    self.logger.debug(
+                        f"Wrote {len(lines)} lines to {database}.{measurement}"
+                    )
 
             return True
 
+        except (InfluxDBWriteError, InfluxDBConnectionError):
+            # Re-lanzar excepciones de InfluxDB para que los tests puedan capturarlas
+            self.logger.error(
+                f"Failed to write data to {database}.{measurement}: Write operation failed"
+            )
+            raise
         except Exception as e:
-            self.logger.error(f"Failed to write data to {database}.{measurement}: {e}")
+            # Solo para otras excepciones inesperadas
+            self.logger.error(
+                f"Failed to write data to {database}.{measurement}: {e}"
+            )
             return False
 
-    def count_records(self, database: str, measurement: str,
-                     start_time: datetime = None, end_time: datetime = None) -> int:
+    def count_records(
+        self,
+        database: str,
+        measurement: str,
+        start_time: datetime = None,
+        end_time: datetime = None,
+    ) -> int:
         """
         Cuenta el número de registros en una medición.
 
@@ -675,18 +813,24 @@ class InfluxDBClient:
 
             result = self._execute_query(query, database)
 
-            if 'results' in result and result['results']:
-                series = result['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    return series[0]['values'][0][1]  # COUNT(*) es el segundo valor
+            if "results" in result and result["results"]:
+                series = result["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    return series[0]["values"][0][
+                        1
+                    ]  # COUNT(*) es el segundo valor
 
             return 0
 
         except Exception as e:
-            self.logger.error(f"Failed to count records in {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to count records in {database}.{measurement}: {e}"
+            )
             return 0
 
-    def get_time_range(self, database: str, measurement: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def get_time_range(
+        self, database: str, measurement: str
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """
         Obtiene el rango de tiempo de una medición.
 
@@ -701,31 +845,37 @@ class InfluxDBClient:
             escaped_measurement = escape_influxdb_identifier(measurement)
 
             # Obtener primera fecha
-            query_first = f"SELECT * FROM {escaped_measurement} ORDER BY time ASC LIMIT 1"
-            result_first = self._execute_query(query_first, database, epoch='ns')
+            query_first = (
+                f"SELECT * FROM {escaped_measurement} ORDER BY time ASC LIMIT 1"
+            )
+            result_first = self._execute_query(
+                query_first, database, epoch="ns"
+            )
 
             first_time = None
-            if 'results' in result_first and result_first['results']:
-                series = result_first['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    timestamp_ns = series[0]['values'][0][0]
-                    first_time = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+            if "results" in result_first and result_first["results"]:
+                series = result_first["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    timestamp_value = series[0]["values"][0][0]
+                    first_time = self._convert_timestamp(timestamp_value)
 
             # Obtener última fecha
             query_last = f"SELECT * FROM {escaped_measurement} ORDER BY time DESC LIMIT 1"
-            result_last = self._execute_query(query_last, database, epoch='ns')
+            result_last = self._execute_query(query_last, database, epoch="ns")
 
             last_time = None
-            if 'results' in result_last and result_last['results']:
-                series = result_last['results'][0].get('series', [])
-                if series and series[0].get('values'):
-                    timestamp_ns = series[0]['values'][0][0]
-                    last_time = datetime.fromtimestamp(timestamp_ns / 1_000_000_000)
+            if "results" in result_last and result_last["results"]:
+                series = result_last["results"][0].get("series", [])
+                if series and series[0].get("values"):
+                    timestamp_value = series[0]["values"][0][0]
+                    last_time = self._convert_timestamp(timestamp_value)
 
             return first_time, last_time
 
         except Exception as e:
-            self.logger.error(f"Failed to get time range from {database}.{measurement}: {e}")
+            self.logger.error(
+                f"Failed to get time range from {database}.{measurement}: {e}"
+            )
             return None, None
 
     def close(self) -> None:

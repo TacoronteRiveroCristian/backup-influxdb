@@ -6,18 +6,20 @@ Verifica la integridad y calidad de los datos tras el backup
 mediante métricas estadísticas y comparaciones detalladas.
 """
 
+import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple, Union
-from dataclasses import dataclass
-from enum import Enum
-import json
 
 
 class MetricType(Enum):
     """Tipos de métricas disponibles."""
+
     NUMERIC = "numeric"
     BOOLEAN = "boolean"
     STRING = "string"
@@ -28,6 +30,7 @@ class MetricType(Enum):
 @dataclass
 class MetricResult:
     """Resultado de una métrica de calidad."""
+
     metric_name: str
     metric_type: MetricType
     source_value: Any
@@ -41,6 +44,7 @@ class MetricResult:
 @dataclass
 class QualityReport:
     """Reporte completo de calidad de datos."""
+
     database_name: str
     measurement_name: str
     timestamp: datetime
@@ -70,10 +74,12 @@ class QualityMetrics:
         self.tolerance = tolerance
         self.logger = logging.getLogger(__name__)
 
-    def calculate_numeric_metrics(self,
-                                source_data: List[float],
-                                dest_data: List[float],
-                                tolerance: float = None) -> Dict[str, MetricResult]:
+    def calculate_numeric_metrics(
+        self,
+        source_data: List[float],
+        dest_data: List[float],
+        tolerance: float = None,
+    ) -> Dict[str, MetricResult]:
         """
         Calcula métricas para datos numéricos.
 
@@ -105,8 +111,8 @@ class QualityMetrics:
             passed=len(source_clean) == len(dest_clean),
             details={
                 "source_nulls": len(source_data) - len(source_clean),
-                "dest_nulls": len(dest_data) - len(dest_clean)
-            }
+                "dest_nulls": len(dest_data) - len(dest_clean),
+            },
         )
         metrics["count"] = count_metric
 
@@ -131,8 +137,12 @@ class QualityMetrics:
             destination_value=dest_mean,
             difference=mean_diff,
             tolerance=mean_tolerance,
-            passed=mean_diff <= mean_tolerance,
-            details={"relative_error": mean_diff / abs(source_mean) if source_mean != 0 else 0}
+            passed=bool(mean_diff <= mean_tolerance),
+            details={
+                "relative_error": (
+                    mean_diff / abs(source_mean) if source_mean != 0 else 0
+                )
+            },
         )
         metrics["mean"] = mean_metric
 
@@ -149,8 +159,14 @@ class QualityMetrics:
             destination_value=dest_median,
             difference=median_diff,
             tolerance=median_tolerance,
-            passed=median_diff <= median_tolerance,
-            details={"relative_error": median_diff / abs(source_median) if source_median != 0 else 0}
+            passed=bool(median_diff <= median_tolerance),
+            details={
+                "relative_error": (
+                    median_diff / abs(source_median)
+                    if source_median != 0
+                    else 0
+                )
+            },
         )
         metrics["median"] = median_metric
 
@@ -167,8 +183,12 @@ class QualityMetrics:
             destination_value=dest_std,
             difference=std_diff,
             tolerance=std_tolerance,
-            passed=std_diff <= std_tolerance,
-            details={"relative_error": std_diff / abs(source_std) if source_std != 0 else 0}
+            passed=bool(std_diff <= std_tolerance),
+            details={
+                "relative_error": (
+                    std_diff / abs(source_std) if source_std != 0 else 0
+                )
+            },
         )
         metrics["std"] = std_metric
 
@@ -186,8 +206,12 @@ class QualityMetrics:
                 destination_value=dest_perc,
                 difference=perc_diff,
                 tolerance=perc_tolerance,
-                passed=perc_diff <= perc_tolerance,
-                details={"relative_error": perc_diff / abs(source_perc) if source_perc != 0 else 0}
+                passed=bool(perc_diff <= perc_tolerance),
+                details={
+                    "relative_error": (
+                        perc_diff / abs(source_perc) if source_perc != 0 else 0
+                    )
+                },
             )
             metrics[f"p{percentile}"] = perc_metric
 
@@ -204,8 +228,12 @@ class QualityMetrics:
             destination_value=dest_min,
             difference=min_diff,
             tolerance=min_tolerance,
-            passed=min_diff <= min_tolerance,
-            details={"relative_error": min_diff / abs(source_min) if source_min != 0 else 0}
+            passed=bool(min_diff <= min_tolerance),
+            details={
+                "relative_error": (
+                    min_diff / abs(source_min) if source_min != 0 else 0
+                )
+            },
         )
         metrics["min"] = min_metric
 
@@ -221,16 +249,20 @@ class QualityMetrics:
             destination_value=dest_max,
             difference=max_diff,
             tolerance=max_tolerance,
-            passed=max_diff <= max_tolerance,
-            details={"relative_error": max_diff / abs(source_max) if source_max != 0 else 0}
+            passed=bool(max_diff <= max_tolerance),
+            details={
+                "relative_error": (
+                    max_diff / abs(source_max) if source_max != 0 else 0
+                )
+            },
         )
         metrics["max"] = max_metric
 
         return metrics
 
-    def calculate_boolean_metrics(self,
-                                source_data: List[bool],
-                                dest_data: List[bool]) -> Dict[str, MetricResult]:
+    def calculate_boolean_metrics(
+        self, source_data: List[bool], dest_data: List[bool]
+    ) -> Dict[str, MetricResult]:
         """
         Calcula métricas para datos booleanos.
 
@@ -255,11 +287,11 @@ class QualityMetrics:
             destination_value=len(dest_clean),
             difference=len(dest_clean) - len(source_clean),
             tolerance=0,
-            passed=len(source_clean) == len(dest_clean),
+            passed=bool(len(source_clean) == len(dest_clean)),
             details={
                 "source_nulls": len(source_data) - len(source_clean),
-                "dest_nulls": len(dest_data) - len(dest_clean)
-            }
+                "dest_nulls": len(dest_data) - len(dest_clean),
+            },
         )
         metrics["count"] = count_metric
 
@@ -278,8 +310,8 @@ class QualityMetrics:
             destination_value=dest_true_count,
             difference=true_count_diff,
             tolerance=0,
-            passed=true_count_diff == 0,
-            details={}
+            passed=bool(true_count_diff == 0),
+            details={},
         )
         metrics["true_count"] = true_count_metric
 
@@ -295,8 +327,8 @@ class QualityMetrics:
             destination_value=dest_false_count,
             difference=false_count_diff,
             tolerance=0,
-            passed=false_count_diff == 0,
-            details={}
+            passed=bool(false_count_diff == 0),
+            details={},
         )
         metrics["false_count"] = false_count_metric
 
@@ -312,16 +344,16 @@ class QualityMetrics:
             destination_value=dest_true_ratio,
             difference=true_ratio_diff,
             tolerance=self.tolerance,
-            passed=true_ratio_diff <= self.tolerance,
-            details={}
+            passed=bool(true_ratio_diff <= self.tolerance),
+            details={},
         )
         metrics["true_ratio"] = true_ratio_metric
 
         return metrics
 
-    def calculate_string_metrics(self,
-                               source_data: List[str],
-                               dest_data: List[str]) -> Dict[str, MetricResult]:
+    def calculate_string_metrics(
+        self, source_data: List[str], dest_data: List[str]
+    ) -> Dict[str, MetricResult]:
         """
         Calcula métricas para datos de cadenas.
 
@@ -349,8 +381,8 @@ class QualityMetrics:
             passed=len(source_clean) == len(dest_clean),
             details={
                 "source_nulls": len(source_data) - len(source_clean),
-                "dest_nulls": len(dest_data) - len(dest_clean)
-            }
+                "dest_nulls": len(dest_data) - len(dest_clean),
+            },
         )
         metrics["count"] = count_metric
 
@@ -374,8 +406,8 @@ class QualityMetrics:
                 "source_unique_values": sorted(list(source_unique)),
                 "dest_unique_values": sorted(list(dest_unique)),
                 "missing_values": sorted(list(source_unique - dest_unique)),
-                "extra_values": sorted(list(dest_unique - source_unique))
-            }
+                "extra_values": sorted(list(dest_unique - source_unique)),
+            },
         )
         metrics["unique_count"] = unique_count_metric
 
@@ -392,7 +424,7 @@ class QualityMetrics:
             difference=avg_length_diff,
             tolerance=source_avg_length * self.tolerance,
             passed=avg_length_diff <= source_avg_length * self.tolerance,
-            details={}
+            details={},
         )
         metrics["avg_length"] = avg_length_metric
 
@@ -410,16 +442,16 @@ class QualityMetrics:
             passed=source_counts.to_dict() == dest_counts.to_dict(),
             details={
                 "source_top_10": source_counts.to_dict(),
-                "dest_top_10": dest_counts.to_dict()
-            }
+                "dest_top_10": dest_counts.to_dict(),
+            },
         )
         metrics["distribution"] = distribution_metric
 
         return metrics
 
-    def calculate_temporal_metrics(self,
-                                 source_data: List[datetime],
-                                 dest_data: List[datetime]) -> Dict[str, MetricResult]:
+    def calculate_temporal_metrics(
+        self, source_data: List[datetime], dest_data: List[datetime]
+    ) -> Dict[str, MetricResult]:
         """
         Calcula métricas para datos temporales.
 
@@ -447,8 +479,8 @@ class QualityMetrics:
             passed=len(source_clean) == len(dest_clean),
             details={
                 "source_nulls": len(source_data) - len(source_clean),
-                "dest_nulls": len(dest_data) - len(dest_clean)
-            }
+                "dest_nulls": len(dest_data) - len(dest_clean),
+            },
         )
         metrics["count"] = count_metric
 
@@ -469,23 +501,30 @@ class QualityMetrics:
             metric_type=MetricType.TEMPORAL,
             source_value={"min": source_min, "max": source_max},
             destination_value={"min": dest_min, "max": dest_max},
-            difference={"min_diff_seconds": min_diff, "max_diff_seconds": max_diff},
+            difference={
+                "min_diff_seconds": min_diff,
+                "max_diff_seconds": max_diff,
+            },
             tolerance=1.0,  # 1 segundo de tolerancia
             passed=min_diff <= 1.0 and max_diff <= 1.0,
             details={
-                "source_range_seconds": (source_max - source_min).total_seconds(),
-                "dest_range_seconds": (dest_max - dest_min).total_seconds()
-            }
+                "source_range_seconds": (
+                    source_max - source_min
+                ).total_seconds(),
+                "dest_range_seconds": (dest_max - dest_min).total_seconds(),
+            },
         )
         metrics["time_range"] = time_range_metric
 
         return metrics
 
-    def compare_datasets(self,
-                        source_data: Dict[str, List[Any]],
-                        dest_data: Dict[str, List[Any]],
-                        measurement_name: str,
-                        database_name: str = "unknown") -> QualityReport:
+    def compare_datasets(
+        self,
+        source_data: Dict[str, List[Any]],
+        dest_data: Dict[str, List[Any]],
+        measurement_name: str,
+        database_name: str = "unknown",
+    ) -> QualityReport:
         """
         Compara dos datasets completos.
 
@@ -505,24 +544,36 @@ class QualityMetrics:
         dest_fields = set(dest_data.keys())
 
         if source_fields != dest_fields:
-            self.logger.warning(f"Campos diferentes - Origen: {source_fields}, Destino: {dest_fields}")
+            self.logger.warning(
+                f"Campos diferentes - Origen: {source_fields}, Destino: {dest_fields}"
+            )
 
         # Procesar cada campo
         for field_name in source_fields.intersection(dest_fields):
             source_values = source_data[field_name]
             dest_values = dest_data[field_name]
 
-            # Determinar el tipo de datos
-            if all(isinstance(x, (int, float)) or x is None for x in source_values):
-                field_metrics = self.calculate_numeric_metrics(source_values, dest_values)
-            elif all(isinstance(x, bool) or x is None for x in source_values):
-                field_metrics = self.calculate_boolean_metrics(source_values, dest_values)
-            elif all(isinstance(x, datetime) or x is None for x in source_values):
-                field_metrics = self.calculate_temporal_metrics(source_values, dest_values)
+            # Determinar el tipo de datos (verificar bool antes que int/float)
+            if all(isinstance(x, bool) or x is None for x in source_values):
+                field_metrics = self.calculate_boolean_metrics(
+                    source_values, dest_values
+                )
+            elif all(
+                isinstance(x, (int, float)) or x is None for x in source_values
+            ):
+                field_metrics = self.calculate_numeric_metrics(
+                    source_values, dest_values
+                )
+            elif all(
+                isinstance(x, datetime) or x is None for x in source_values
+            ):
+                field_metrics = self.calculate_temporal_metrics(
+                    source_values, dest_values
+                )
             else:
                 field_metrics = self.calculate_string_metrics(
                     [str(x) for x in source_values],
-                    [str(x) for x in dest_values]
+                    [str(x) for x in dest_values],
                 )
 
             # Agregar prefijo del campo a las métricas
@@ -542,9 +593,13 @@ class QualityMetrics:
             "extra_fields": list(dest_fields - source_fields),
             "data_types": self._analyze_data_types(source_data),
             "record_counts": {
-                "source": len(list(source_data.values())[0]) if source_data else 0,
-                "destination": len(list(dest_data.values())[0]) if dest_data else 0
-            }
+                "source": (
+                    len(list(source_data.values())[0]) if source_data else 0
+                ),
+                "destination": (
+                    len(list(dest_data.values())[0]) if dest_data else 0
+                ),
+            },
         }
 
         return QualityReport(
@@ -556,7 +611,7 @@ class QualityMetrics:
             failed_metrics=failed_metrics,
             success_rate=success_rate,
             metrics=all_metrics,
-            summary=summary
+            summary=summary,
         )
 
     def _analyze_data_types(self, data: Dict[str, List[Any]]) -> Dict[str, str]:
@@ -615,11 +670,13 @@ DETALLE DE DATOS:
 - Registros destino: {report.summary['record_counts']['destination']}
 """
 
-        if report.summary['missing_fields']:
+        if report.summary["missing_fields"]:
             summary += f"\nCampos faltantes en destino: {report.summary['missing_fields']}"
 
-        if report.summary['extra_fields']:
-            summary += f"\nCampos extra en destino: {report.summary['extra_fields']}"
+        if report.summary["extra_fields"]:
+            summary += (
+                f"\nCampos extra en destino: {report.summary['extra_fields']}"
+            )
 
         # Agregar detalles de métricas fallidas
         failed_metrics = [m for m in report.metrics if not m.passed]
@@ -647,7 +704,7 @@ DETALLE DE DATOS:
             "failed_metrics": report.failed_metrics,
             "success_rate": report.success_rate,
             "summary": report.summary,
-            "metrics": []
+            "metrics": [],
         }
 
         for metric in report.metrics:
@@ -655,15 +712,17 @@ DETALLE DE DATOS:
                 "metric_name": metric.metric_name,
                 "metric_type": metric.metric_type.value,
                 "source_value": self._serialize_value(metric.source_value),
-                "destination_value": self._serialize_value(metric.destination_value),
+                "destination_value": self._serialize_value(
+                    metric.destination_value
+                ),
                 "difference": self._serialize_value(metric.difference),
                 "tolerance": metric.tolerance,
                 "passed": metric.passed,
-                "details": metric.details
+                "details": metric.details,
             }
             report_dict["metrics"].append(metric_dict)
 
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(report_dict, f, indent=2, default=str)
 
     def _serialize_value(self, value: Any) -> Any:

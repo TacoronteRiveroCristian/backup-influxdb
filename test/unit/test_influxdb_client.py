@@ -18,7 +18,7 @@ import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.influxdb_client import (
+from src.classes.influxdb_client import (
     InfluxDBClient,
     InfluxDBConnectionError,
     InfluxDBError,
@@ -39,13 +39,25 @@ class TestInfluxDBClient(unittest.TestCase):
             timeout=30,
         )
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_test_connection_success(self, mock_get):
         """Test para conexión exitosa."""
-        # Configurar mock response
+        # Configurar mock response con formato válido de InfluxDB
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {}
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "series": [
+                        {
+                            "name": "databases",
+                            "columns": ["name"],
+                            "values": [["_internal"], ["mydb"]],
+                        }
+                    ]
+                }
+            ]
+        }
         mock_get.return_value = mock_response
 
         # Ejecutar test
@@ -55,7 +67,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertTrue(result)
         mock_get.assert_called_once()
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_test_connection_failure(self, mock_get):
         """Test para fallo de conexión."""
         # Configurar mock para lanzar excepción
@@ -69,7 +81,7 @@ class TestInfluxDBClient(unittest.TestCase):
         # Verificar resultado
         self.assertFalse(result)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_create_database_success(self, mock_get):
         """Test para creación exitosa de base de datos."""
         # Configurar mock response
@@ -85,7 +97,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertTrue(result)
         mock_get.assert_called_once()
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_get_databases(self, mock_get):
         """Test para obtener lista de bases de datos."""
         # Configurar mock response
@@ -113,7 +125,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertEqual(databases, ["db1", "db2", "db3"])
         mock_get.assert_called_once()
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_get_measurements(self, mock_get):
         """Test para obtener lista de mediciones."""
         # Configurar mock response
@@ -140,7 +152,7 @@ class TestInfluxDBClient(unittest.TestCase):
         # Verificar resultado
         self.assertEqual(measurements, ["measurement1", "measurement2"])
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_get_field_keys(self, mock_get):
         """Test para obtener claves de campos."""
         # Configurar mock response
@@ -172,7 +184,7 @@ class TestInfluxDBClient(unittest.TestCase):
         expected = {"field1": "float", "field2": "integer", "field3": "string"}
         self.assertEqual(field_keys, expected)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_query_data_success(self, mock_get):
         """Test para consulta exitosa de datos."""
         # Configurar mock response
@@ -208,7 +220,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertEqual(data[0]["field1"], 10.5)
         self.assertEqual(data[0]["field2"], 20)
 
-    @patch("src.influxdb_client.requests.Session.post")
+    @patch("src.classes.influxdb_client.requests.Session.post")
     def test_write_data_success(self, mock_post):
         """Test para escritura exitosa de datos."""
         # Configurar mock response
@@ -233,7 +245,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertTrue(result)
         mock_post.assert_called_once()
 
-    @patch("src.influxdb_client.requests.Session.post")
+    @patch("src.classes.influxdb_client.requests.Session.post")
     def test_write_data_failure(self, mock_post):
         """Test para fallo en escritura de datos."""
         # Configurar mock response para error
@@ -256,7 +268,7 @@ class TestInfluxDBClient(unittest.TestCase):
         with self.assertRaises(Exception):  # Debería lanzar InfluxDBWriteError
             self.client.write_data("test_db", "test_measurement", records)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_count_records(self, mock_get):
         """Test para contar registros."""
         # Configurar mock response
@@ -283,7 +295,7 @@ class TestInfluxDBClient(unittest.TestCase):
         # Verificar resultado
         self.assertEqual(count, 1000)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_get_time_range(self, mock_get):
         """Test para obtener rango temporal."""
         # Configurar mock response
@@ -325,7 +337,8 @@ class TestInfluxDBClient(unittest.TestCase):
         params = {"q": "SHOW DATABASES", "db": "test_db"}
         url = self.client._build_query_url(params)
         self.assertIn("query", url)
-        self.assertIn("SHOW%20DATABASES", url)
+        # Ambos encodings son válidos para espacios: %20 o +
+        self.assertTrue("SHOW%20DATABASES" in url or "SHOW+DATABASES" in url)
 
         # Test write URL
         url = self.client._build_write_url("test_db", "ns")
@@ -333,7 +346,7 @@ class TestInfluxDBClient(unittest.TestCase):
         self.assertIn("db=test_db", url)
         self.assertIn("precision=ns", url)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_query_error_handling(self, mock_get):
         """Test para manejo de errores en consultas."""
         # Configurar mock response con error
@@ -346,7 +359,7 @@ class TestInfluxDBClient(unittest.TestCase):
         with self.assertRaises(Exception):  # Debería lanzar InfluxDBQueryError
             self.client._execute_query("INVALID QUERY")
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_json_response_error(self, mock_get):
         """Test para manejo de errores en response JSON."""
         # Configurar mock response con error en JSON
@@ -359,7 +372,7 @@ class TestInfluxDBClient(unittest.TestCase):
         with self.assertRaises(Exception):  # Debería lanzar InfluxDBQueryError
             self.client._execute_query("SHOW DATABASES")
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_connection_timeout(self, mock_get):
         """Test para timeout de conexión."""
         # Configurar mock para timeout
@@ -406,7 +419,7 @@ class TestInfluxDBClient(unittest.TestCase):
                 self.assertEqual(client, self.client)
             mock_close.assert_called_once()
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_database_exists_true(self, mock_get):
         """Test para verificar que base de datos existe."""
         # Configurar mock response
@@ -433,7 +446,7 @@ class TestInfluxDBClient(unittest.TestCase):
         # Verificar resultado
         self.assertTrue(exists)
 
-    @patch("src.influxdb_client.requests.Session.get")
+    @patch("src.classes.influxdb_client.requests.Session.get")
     def test_database_exists_false(self, mock_get):
         """Test para verificar que base de datos no existe."""
         # Configurar mock response

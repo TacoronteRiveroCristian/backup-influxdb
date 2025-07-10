@@ -28,6 +28,10 @@ schema>=0.7.5
 # Performance monitoring
 memory-profiler>=0.61.0
 
+# Data generation for testing
+numpy>=2.3.1
+faker>=37.4.0
+
 # Development and testing (optional)
 pytest>=7.4.0
 pytest-cov>=4.1.0

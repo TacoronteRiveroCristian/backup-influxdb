@@ -32,9 +32,14 @@ class DataGenerator:
             seed: Semilla para reproducibilidad
         """
         self.seed = seed
+
+        # Usar RandomState para mejor control de semillas
         if seed is not None:
-            random.seed(seed)
-            np.random.seed(seed)
+            self.rng = np.random.RandomState(seed)
+            self.py_random = random.Random(seed)
+        else:
+            self.rng = np.random.RandomState()
+            self.py_random = random.Random()
 
         self.fake = Faker()
         if seed is not None:
@@ -59,23 +64,24 @@ class DataGenerator:
         if data_type == "normal":
             mean = kwargs.get("mean", 0.0)
             std = kwargs.get("std", 1.0)
-            return np.random.normal(mean, std, count).tolist()
+            return self.rng.normal(mean, std, count).tolist()
 
         elif data_type == "uniform":
             low = kwargs.get("low", 0.0)
             high = kwargs.get("high", 1.0)
-            return np.random.uniform(low, high, count).tolist()
+            return self.rng.uniform(low, high, count).tolist()
 
         elif data_type == "exponential":
             scale = kwargs.get("scale", 1.0)
-            return np.random.exponential(scale, count).tolist()
+            return self.rng.exponential(scale, count).tolist()
 
         elif data_type == "linear":
             start = kwargs.get("start", 0.0)
             end = kwargs.get("end", 100.0)
             noise = kwargs.get("noise", 0.1)
             base = np.linspace(start, end, count)
-            noise_data = np.random.normal(0, noise * (end - start), count)
+            # Usar abs() para asegurar que scale sea positivo
+            noise_data = self.rng.normal(0, noise * abs(end - start), count)
             return (base + noise_data).tolist()
 
         elif data_type == "seasonal":
@@ -86,7 +92,8 @@ class DataGenerator:
 
             t = np.linspace(0, count * 2 * np.pi / period, count)
             seasonal = amplitude * np.sin(t) + offset
-            noise_data = np.random.normal(0, noise * amplitude, count)
+            # Usar abs() para asegurar que scale sea positivo
+            noise_data = self.rng.normal(0, noise * abs(amplitude), count)
             return (seasonal + noise_data).tolist()
 
         else:
@@ -105,7 +112,9 @@ class DataGenerator:
         Returns:
             List[bool]: Lista de valores booleanos
         """
-        return [random.random() < true_probability for _ in range(count)]
+        return [
+            self.py_random.random() < true_probability for _ in range(count)
+        ]
 
     def generate_string_data(
         self, count: int, data_type: str = "random", **kwargs
@@ -125,7 +134,7 @@ class DataGenerator:
             length = kwargs.get("length", 10)
             return [
                 "".join(
-                    random.choices(
+                    self.py_random.choices(
                         string.ascii_letters + string.digits, k=length
                     )
                 )
@@ -143,7 +152,7 @@ class DataGenerator:
 
         elif data_type == "enum":
             values = kwargs.get("values", ["A", "B", "C"])
-            return [random.choice(values) for _ in range(count)]
+            return [self.py_random.choice(values) for _ in range(count)]
 
         elif data_type == "city":
             return [self.fake.city() for _ in range(count)]
@@ -193,7 +202,9 @@ class DataGenerator:
                 # Añadir variación aleatoria de ±10% del intervalo
                 jitter_seconds = delta.total_seconds() * 0.1
                 jitter_offset = timedelta(
-                    seconds=random.uniform(-jitter_seconds, jitter_seconds)
+                    seconds=self.py_random.uniform(
+                        -jitter_seconds, jitter_seconds
+                    )
                 )
                 timestamps.append(current_time + jitter_offset)
             else:
@@ -209,8 +220,8 @@ class DataGenerator:
         start_time: datetime,
         end_time: datetime,
         interval: str = "1m",
-        field_configs: Dict[str, Dict[str, Any]] = None,
-        tag_configs: Dict[str, Dict[str, Any]] = None,
+        field_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        tag_configs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Genera datos completos para una medición.
@@ -256,6 +267,9 @@ class DataGenerator:
         for field_name, config in field_configs.items():
             field_type = config.get("type", "normal")
 
+            # Crear copia de config sin el campo 'type'
+            config_args = {k: v for k, v in config.items() if k != "type"}
+
             if field_type in [
                 "normal",
                 "uniform",
@@ -264,23 +278,25 @@ class DataGenerator:
                 "seasonal",
             ]:
                 field_data[field_name] = self.generate_numeric_data(
-                    count, field_type, **config
+                    count, field_type, **config_args
                 )
             elif field_type == "boolean":
                 field_data[field_name] = self.generate_boolean_data(
-                    count, **config
+                    count, **config_args
                 )
             else:
                 field_data[field_name] = self.generate_string_data(
-                    count, field_type, **config
+                    count, field_type, **config_args
                 )
 
         # Generar datos de tags
         tag_data = {}
         for tag_name, config in tag_configs.items():
             tag_type = config.get("type", "enum")
+            # Crear copia de config sin el campo 'type'
+            config_args = {k: v for k, v in config.items() if k != "type"}
             tag_data[tag_name] = self.generate_string_data(
-                count, tag_type, **config
+                count, tag_type, **config_args
             )
 
         # Combinar en registros
@@ -345,7 +361,7 @@ class DataGenerator:
         data: List[float],
         anomaly_rate: float = 0.05,
         anomaly_type: str = "outlier",
-    ) -> List[float]:
+    ) -> List[Optional[float]]:
         """
         Introduce anomalías en los datos.
 
@@ -359,16 +375,16 @@ class DataGenerator:
         """
         result = data.copy()
         num_anomalies = int(len(data) * anomaly_rate)
-        anomaly_indices = random.sample(range(len(data)), num_anomalies)
+        anomaly_indices = self.py_random.sample(range(len(data)), num_anomalies)
 
         for idx in anomaly_indices:
             if anomaly_type == "outlier":
                 # Valor extremo
                 std = np.std(data)
                 mean = np.mean(data)
-                result[idx] = mean + random.choice(
+                result[idx] = mean + self.py_random.choice(
                     [-1, 1]
-                ) * std * random.uniform(5, 10)
+                ) * std * self.py_random.uniform(5, 10)
 
             elif anomaly_type == "missing":
                 # Valor faltante (None)
@@ -376,6 +392,6 @@ class DataGenerator:
 
             elif anomaly_type == "spike":
                 # Pico repentino
-                result[idx] = result[idx] * random.uniform(10, 50)
+                result[idx] = result[idx] * self.py_random.uniform(10, 50)
 
         return result

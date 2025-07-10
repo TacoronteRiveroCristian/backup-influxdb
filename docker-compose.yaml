@@ -3,10 +3,14 @@ x-sysadmintoolkit-backup-service: &sysadmintoolkit-backup-service
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      - GIT_USER_NAME=${GIT_USER_NAME:-Developer}
+      - GIT_USER_EMAIL=${GIT_USER_EMAIL:-dev@example.com}
+      - GIT_DEFAULT_BRANCH=${GIT_DEFAULT_BRANCH:-main}
+      - GIT_TOKEN=${GIT_TOKEN}
   volumes:
     - ./volumes/backup_logs:/var/log/backup_influxdb
     - ./config:/app/config
-    - ./src:/app/src
   networks:
     - backup-network
   environment:
@@ -65,28 +69,42 @@ services:
   sysadmintoolkit-backup-service-dev: # Backup service for development
     container_name: sysadmintoolkit-backup-service-dev
     <<: *sysadmintoolkit-backup-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development  # Usar el stage de development
+      args:
+        - GIT_USER_NAME=${GIT_USER_NAME:-Developer}
+        - GIT_USER_EMAIL=${GIT_USER_EMAIL:-dev@example.com}
+        - GIT_DEFAULT_BRANCH=${GIT_DEFAULT_BRANCH:-main}
     volumes:
-      - ./:/app/
+      - ./:/app/  # Montar todo el proyecto para desarrollo
       - ./volumes/backup_logs:/var/log/backup_influxdb # Path de ficheros .logs configurados en .config/*.yaml
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock  # Acceso a Docker desde dentro del contenedor
     environment:
       - PYTHONPATH=/app
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - DEVELOPMENT=true
+      - GIT_TOKEN=${GIT_TOKEN}
     profiles:
       - development
-    # Mantener el contenedor ejecutándose para devcontainer
-    command: sleep infinity
-    # Permitir capabilities para desarrollo
+    # El stage development ya tiene sleep infinity como default
+    # Permitir capabilities para desarrollo y acceso a Docker
     cap_add:
       - SYS_PTRACE
+    privileged: true  # Necesario para acceso completo a Docker
 
   sysadmintoolkit-backup-service-prod: # Backup service for production
     container_name: sysadmintoolkit-backup-service-prod
     <<: *sysadmintoolkit-backup-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production  # Usar el stage de production (imagen mínima)
     profiles:
       - production
     restart: unless-stopped
-    command: python /app/main.py
+    # El stage production ya tiene el comando correcto como default
 
 ### Networks ###
 networks:

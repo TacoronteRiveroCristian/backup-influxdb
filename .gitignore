@@ -2,3 +2,9 @@ volumes/**/data/
 config/*.yaml
 *.log
 *.logs
+test/test_results/
+
+# Variables de entorno sensibles
+.env
+.env.local
+.env.*.local

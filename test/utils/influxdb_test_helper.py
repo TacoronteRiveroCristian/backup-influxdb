@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from test.data.data_generator import DataGenerator
 from test.utils.quality_metrics import QualityMetrics
 
-from src.influxdb_client import InfluxDBClient
+from src.classes.influxdb_client import InfluxDBClient
 
 
 class InfluxDBTestHelper:
