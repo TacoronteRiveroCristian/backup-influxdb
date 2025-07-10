@@ -3,6 +3,7 @@ config/*.yaml
 *.log
 *.logs
 test/test_results/
+test/coverage/
 
 # Variables de entorno sensibles
 .env

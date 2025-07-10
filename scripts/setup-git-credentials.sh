@@ -1,60 +1,64 @@
 #!/bin/bash
 
-# Script para configurar credenciales de Git en el contenedor
-# Uso: ./scripts/setup-git-credentials.sh
+# Script para configurar credenciales de Git en el contenedor de desarrollo
+# Este script facilita la configuración inicial del entorno de desarrollo
 
 set -e
 
-echo "=== Configuración de Credenciales de Git ==="
-echo ""
+# Colores para output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Verificar si existe el archivo .env
-if [ ! -f .env ]; then
-    echo "❌ No se encontró el archivo .env"
-    echo "📝 Creando .env desde .env.example..."
-
-    if [ -f .env.example ]; then
+# Verificar si existe .env
+if [ ! -f ".env" ]; then
+    echo "No se encontró el archivo .env"
+    echo "Creando .env desde .env.example..."
+    if [ -f ".env.example" ]; then
         cp .env.example .env
-        echo "✅ .env creado desde .env.example"
+        echo "Archivo .env creado desde .env.example"
     else
-        echo "📝 Creando .env básico..."
+        echo "Creando .env básico..."
         cat > .env << 'EOF'
-# Configuración de Git para el contenedor de desarrollo
-GIT_USER_NAME="Tu Nombre"
-GIT_USER_EMAIL="tu.email@example.com"
-GIT_DEFAULT_BRANCH="main"
-GIT_TOKEN=""
+# Configuración de Git para desarrollo
+GIT_USER_NAME="Developer"
+GIT_USER_EMAIL="developer@example.com"
 
-# Otras variables de entorno
-INFLUXDB_NETWORK=influxdb-network
-GF_SECURITY_ADMIN_USER=admin
-GF_SECURITY_ADMIN_PASSWORD=admin
+# Configuración opcional de InfluxDB para desarrollo
+INFLUX_HOST=localhost
+INFLUX_PORT=8086
+INFLUX_USER=admin
+INFLUX_PASS=password
+INFLUX_DB=test_db
+
+# Configuración de logs
+LOG_LEVEL=INFO
+LOG_FILE_PATH=./volumes/logs/
 EOF
-        echo "✅ .env básico creado"
+        echo "Archivo .env básico creado"
     fi
-    echo ""
 fi
 
-echo "📋 Configuración actual del .env:"
-echo "--------------------------------"
-grep -E "^(GIT_|INFLUXDB_|GF_)" .env || echo "No hay variables configuradas"
 echo ""
+echo "Configuración actual del .env:"
+echo "==============================================="
+cat .env | grep -E "^(GIT_|#)" || true
+echo "==============================================="
 
-echo "🔧 Para configurar Git:"
-echo "1. Edita el archivo .env"
-echo "2. Configura las variables GIT_*"
-echo "3. Para el GIT_TOKEN, usa un Personal Access Token de GitHub"
 echo ""
-
-echo "🚀 Para aplicar los cambios:"
-echo "docker-compose build sysadmintoolkit-backup-service-dev"
-echo "docker-compose --profile development up -d"
+echo "Para configurar Git:"
+echo "  1. Edita el archivo .env"
+echo "  2. Cambia GIT_USER_NAME y GIT_USER_EMAIL"
+echo "  3. Guarda el archivo"
 echo ""
-
-echo "🔍 Para verificar la configuración:"
-echo "docker-compose --profile development exec sysadmintoolkit-backup-service-dev git config --list --global"
+echo "Para aplicar los cambios:"
+echo "  ./scripts/dev-tools.sh dev-down"
+echo "  ./scripts/dev-tools.sh dev-up"
 echo ""
-
-echo "⚠️  IMPORTANTE: Nunca subas el archivo .env al repositorio"
-echo "   El .env ya está en .gitignore por seguridad"
+echo "Para verificar la configuración:"
+echo "  ./scripts/dev-tools.sh dev-shell"
+echo "  git config --list"
 echo ""
+echo "IMPORTANTE: Nunca subas el archivo .env al repositorio"

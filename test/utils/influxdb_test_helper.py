@@ -207,15 +207,43 @@ class InfluxDBTestHelper:
             )
 
             try:
-                # Convertir formato para InfluxDB
+                # Convertir formato para InfluxDB usando el formato correcto
+                # El cliente InfluxDB espera un formato específico sin tags anidados
                 influxdb_records = []
                 for record in records:
+                    # Crear un registro compatible con influxdb-client
                     influxdb_record = {
                         "measurement": record["measurement"],
                         "time": record["time"],
-                        "fields": record["fields"],
-                        "tags": record["tags"],
                     }
+
+                    # Agregar fields directamente al nivel superior del record
+                    if "fields" in record and record["fields"]:
+                        if isinstance(record["fields"], str):
+                            # Si fields es string JSON, parsearlo
+                            import json
+                            fields_dict = json.loads(record["fields"])
+                        else:
+                            fields_dict = record["fields"]
+
+                        # Agregar todos los fields al record
+                        for field_name, field_value in fields_dict.items():
+                            influxdb_record[field_name] = field_value
+
+                    # Agregar tags directamente al nivel superior del record
+                    # NO como diccionario anidado, sino como campos individuales
+                    if "tags" in record and record["tags"]:
+                        if isinstance(record["tags"], str):
+                            # Si tags es string JSON, parsearlo
+                            import json
+                            tags_dict = json.loads(record["tags"])
+                        else:
+                            tags_dict = record["tags"]
+
+                        # Agregar los tags como campos individuales (no anidados)
+                        for tag_name, tag_value in tags_dict.items():
+                            influxdb_record[tag_name] = tag_value
+
                     influxdb_records.append(influxdb_record)
 
                 # Escribir en lotes

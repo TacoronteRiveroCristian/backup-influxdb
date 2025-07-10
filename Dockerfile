@@ -54,6 +54,7 @@ ARG GIT_TOKEN=""
 RUN apt-get update && apt-get install -y \
     git \
     docker.io \
+    docker-compose \
     build-essential \
     nano \
     vim \

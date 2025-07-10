@@ -722,28 +722,56 @@ class InfluxDBClient:
                         else:
                             timestamp_ns = int(timestamp)
 
-                    # Separar fields y tags
-                    fields = {}
-                    tags = {}
+                    # Determinar el formato del record
+                    if "fields" in record and "tags" in record:
+                        # Formato anidado del generador de datos
+                        fields = {}
+                        tags = {}
 
-                    for key, value in record.items():
-                        if key == "time":
-                            continue
+                        # Procesar fields
+                        for field_name, field_value in record.get(
+                            "fields", {}
+                        ).items():
+                            if field_value is not None:
+                                fields[field_name] = field_value
 
-                        if value is None:
-                            continue
+                        # Procesar tags
+                        for tag_name, tag_value in record.get(
+                            "tags", {}
+                        ).items():
+                            if tag_value is not None:
+                                tags[tag_name] = str(tag_value)
 
-                        # Determinar si es tag o field
-                        # Tags son strings, fields pueden ser cualquier tipo
-                        if isinstance(value, str) and not key.startswith("_"):
-                            tags[key] = value
-                        else:
-                            fields[key] = value
+                        # Usar el measurement del record si está disponible, sino usar el parámetro
+                        measurement_name = record.get(
+                            "measurement", measurement
+                        )
+                    else:
+                        # Formato plano (para compatibilidad con backup normal)
+                        fields = {}
+                        tags = {}
+                        measurement_name = measurement
+
+                        for key, value in record.items():
+                            if key in ("time", "measurement"):
+                                continue
+
+                            if value is None:
+                                continue
+
+                            # Determinar si es tag o field
+                            # Tags son strings, fields pueden ser cualquier tipo
+                            if isinstance(value, str) and not key.startswith(
+                                "_"
+                            ):
+                                tags[key] = value
+                            else:
+                                fields[key] = value
 
                     # Construir línea de Line Protocol
                     if fields:  # Solo escribir si hay fields
                         line = build_influxdb_line_protocol(
-                            measurement, tags, fields, timestamp_ns
+                            measurement_name, tags, fields, timestamp_ns
                         )
                         lines.append(line)
 

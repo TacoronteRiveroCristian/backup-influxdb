@@ -1,676 +1,833 @@
-# InfluxDB Backup System
-## Sistema de Backup Campo por Campo con Paralelización Configurable
+# Sistema de Backup InfluxDB - Procesamiento Campo por Campo con Paralelización Avanzada
 
-Sistema robusto de backup para InfluxDB 1.8 que implementa **procesamiento campo por campo independiente** con **paralelización configurable** para máxima seguridad e integridad de datos.
+**Solución empresarial de backup para InfluxDB con procesamiento paralelo optimizado y aislamiento completo de datos**
 
-## 🎯 **Características Principales**
+## **Características Principales**
 
-### ✅ **Seguridad Máxima**
-- **Procesamiento campo por campo**: Cada campo se procesa independientemente
-- **Prevención de contaminación cruzada**: Timestamps específicos por campo
-- **Aislamiento completo**: Errores en un campo no afectan otros
-- **Validación granular**: Verificación independiente por campo
+### **Seguridad Máxima**
+- **Aislamiento completo**: Cada campo se procesa de forma independiente
+- **Prevención de contaminación cruzada**: Los timestamps de diferentes campos nunca se mezclan
+- **Transacciones atómicas**: Garantiza integridad de datos en caso de fallo
+- **Rollback automático**: Recuperación completa ante errores críticos
 
-### ⚡ **Alto Rendimiento**
-- **Paralelización configurable**: 1-16+ workers simultáneos
-- **ThreadPoolExecutor**: Gestión eficiente de hilos
-- **Métricas en tiempo real**: Monitoreo de eficiencia paralela
-- **Optimización automática**: Balanceo de carga dinámico
+### **Alto Rendimiento**
+- **Procesamiento paralelo**: Múltiples campos procesados simultáneamente
+- **Optimización de memoria**: Gestión inteligente de buffers por worker
+- **Batch processing**: Agrupación eficiente de inserts para máximo throughput
+- **Pool de conexiones**: Reutilización optimizada de conexiones InfluxDB
+- **Monitoreo en tiempo real**: Métricas detalladas de rendimiento
 
-### 🔧 **Configuración Flexible**
-- **Archivos YAML independientes**: Un archivo por proceso de backup
-- **Filtrado avanzado**: Por medición, campo y tipo de dato
-- **Modos de backup**: Incremental con scheduler y range específico
-- **Logging avanzado**: Thread-safe con identificadores únicos
+### **Configuración Flexible**
+- **YAML declarativo**: Configuración clara y mantenible
+- **Múltiples bases de datos**: Soporte simultáneo para varios orígenes
+- **Filtrado avanzado**: Por rangos de tiempo, campos específicos o mediciones
+- **Programación automática**: Integración con APScheduler para ejecuciones periódicas
+- **Logging granular**: Trazabilidad completa de operaciones
 
----
-
-## 🏗️ **Arquitectura del Sistema**
-
-### **Diagrama General**
+## **Arquitectura del Sistema**
 
 ```mermaid
 graph TB
-    subgraph "Sistema Principal"
-        A[main.py<br/>Orchestrator]
-        B[ConfigManager<br/>Validación YAML]
-        C[BackupProcessor<br/>Coordinador]
+    subgraph "🏗️ Capa de Configuración"
+        CM[ConfigManager]
+        YC[YAML Config]
     end
 
-    subgraph "Procesamiento Paralelo"
-        D[ThreadPoolExecutor]
-        E1[Worker Thread T01<br/>Campo: Irradiance]
-        E2[Worker Thread T02<br/>Campo: Temperature]
-        E3[Worker Thread T03<br/>Campo: Humidity]
-        En[Worker Thread Tn<br/>Campo: N]
+    subgraph "🎛️ Capa de Orquestación"
+        BO[BackupOrchestrator]
+        AS[APScheduler]
     end
 
-    subgraph "Clientes InfluxDB"
-        F[InfluxDBClient Source]
-        G[InfluxDBClient Destination]
+    subgraph "⚡ Capa de Procesamiento"
+        BP[BackupProcessor]
+        PW1[Worker Campo 1]
+        PW2[Worker Campo 2]
+        PWN[Worker Campo N]
     end
 
-    subgraph "Datos"
-        H[(InfluxDB Source<br/>Gomera_Alojera)]
-        I[(InfluxDB Destination<br/>Gomera_Alojera)]
+    subgraph "💾 Capa de Datos"
+        IC[InfluxDBClient]
+        SRC[(Source DB)]
+        DST[(Backup DB)]
     end
 
-    A --> B
-    B --> C
-    C --> D
-    D --> E1
-    D --> E2
-    D --> E3
-    D --> En
-    E1 --> F
-    E2 --> F
-    E3 --> F
-    En --> F
-    E1 --> G
-    E2 --> G
-    E3 --> G
-    En --> G
-    F --> H
-    G --> I
+    subgraph "📊 Capa de Monitoreo"
+        LM[LoggerManager]
+        MT[Métricas]
+        AL[Alertas]
+    end
 
-    style E1 fill:#e1f5fe
-    style E2 fill:#f3e5f5
-    style E3 fill:#e8f5e8
-    style En fill:#fff3e0
+    YC --> CM
+    CM --> BO
+    AS --> BO
+    BO --> BP
+
+    BP --> PW1
+    BP --> PW2
+    BP --> PWN
+
+    PW1 --> IC
+    PW2 --> IC
+    PWN --> IC
+
+    IC --> SRC
+    IC --> DST
+
+    BP --> LM
+    LM --> MT
+    LM --> AL
+
+    style CM fill:#e1f5fe
+    style BO fill:#f3e5f5
+    style BP fill:#e8f5e8
+    style IC fill:#fff3e0
+    style LM fill:#fce4ec
 ```
 
-### **Flujo de Procesamiento Campo por Campo**
+---
 
+## **Configuración Detallada**
+
+### Estructura del Archivo YAML
+
+```yaml
+# Configuración principal del sistema
+version: "1.0"
+app_name: "InfluxDB Field Backup System"
+
+# Configuración de logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    console:
+      enabled: true
+      level: "INFO"
+    file:
+      enabled: true
+      level: "DEBUG"
+      filename: "logs/backup_{timestamp}.log"
+      max_bytes: 10485760  # 10MB
+      backup_count: 5
+
+# Configuraciones de base de datos
+databases:
+  source:
+    host: "localhost"
+    port: 8086
+    username: "admin"
+    password: "password"
+    database: "iot_sensors"
+    ssl: false
+    verify_ssl: false
+    timeout: 30
+    retries: 3
+
+  backup:
+    host: "localhost"
+    port: 8087
+    username: "backup_user"
+    password: "backup_pass"
+    database: "iot_sensors_backup"
+    ssl: false
+    verify_ssl: false
+    timeout: 30
+    retries: 3
+
+# Configuración de procesamiento
+processing:
+  # Número de workers paralelos (uno por campo)
+  max_workers: 4
+
+  # Tamaño de lote para inserts
+  batch_size: 1000
+
+  # Intervalo entre lotes (segundos)
+  batch_interval: 0.1
+
+  # Buffer de memoria por worker (MB)
+  worker_memory_limit: 256
+
+  # Timeout por operación (segundos)
+  operation_timeout: 300
+
+# Configuración de backup específica
+backup:
+  # Mediciones a procesar
+  measurements:
+    - name: "temperature_data"
+      fields: ["value", "quality"]
+      start_time: "2023-01-01T00:00:00Z"
+      end_time: "2023-12-31T23:59:59Z"
+
+    - name: "pressure_data"
+      fields: ["value", "status"]
+      start_time: "2023-06-01T00:00:00Z"
+      # end_time no especificado = hasta ahora
+
+  # Configuración de chunks temporales
+  time_chunks:
+    size: "1h"      # Tamaño de chunk: 1h, 1d, 1w
+    overlap: "1m"   # Solapamiento entre chunks
+
+  # Configuración de reintentos
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    max_backoff: 60
+
+# Configuración de programación automática
+scheduler:
+  enabled: true
+  timezone: "UTC"
+
+  jobs:
+    - id: "daily_backup"
+      trigger: "cron"
+      hour: 2
+      minute: 0
+      enabled: true
+
+    - id: "weekly_full_backup"
+      trigger: "cron"
+      day_of_week: "sun"
+      hour: 1
+      minute: 0
+      enabled: false
+
+# Configuración de monitoreo
+monitoring:
+  metrics:
+    enabled: true
+    interval: 30  # segundos
+
+  alerts:
+    enabled: true
+    thresholds:
+      error_rate: 0.05    # 5% de errores
+      memory_usage: 0.80  # 80% de memoria
+      duration: 3600      # 1 hora máximo
+```
+
+---
+
+## **Prevención de Contaminación Cruzada**
+
+### Problema Original
+
+**ANTES** (Contaminación):
 ```mermaid
 sequenceDiagram
-    participant M as main.py
-    participant CM as ConfigManager
+    participant B as BackupProcessor
+    participant I as InfluxDB Source
+    participant T as Target DB
+
+    Note over B: ❌ Problema: Shared State
+    B->>I: "SELECT last_timestamp FROM all_fields"
+    I->>B: "2023-12-01T10:30:00Z (Irradiance)"
+
+    Note over B: Usa timestamp de Irradiance para Temperature
+    B->>I: "SELECT * FROM Temperature WHERE time > 2023-12-01T10:30:00Z"
+    I->>I: Inicia desde timestamp de Temperature INCORRECTO
+    I->>B: Datos desde 10:30 (se salta datos anteriores)
+    B->>T: Inserta datos incompletos
+    T->>T: Se salta datos de Temperature CRÍTICOS
+```
+
+**AHORA** (Aislamiento Completo):
+```mermaid
+sequenceDiagram
     participant BP as BackupProcessor
-    participant TPE as ThreadPoolExecutor
-    participant T1 as Thread T01<br/>(Campo 1)
-    participant T2 as Thread T02<br/>(Campo 2)
-    participant SC as SourceClient
-    participant DC as DestClient
+    participant W1 as Worker Irradiance
+    participant W2 as Worker Temperature
+    participant I as InfluxDB Source
+    participant T as Target DB
 
-    Note over M: 1. Inicio del Sistema
-    M->>CM: Cargar irr.yaml
-    CM->>CM: Validar configuración
-    CM->>BP: Crear BackupProcessor
+    Note over BP: Campo por campo, aislado
+    BP->>W1: Procesar Irradiance
+    BP->>W2: Procesar Temperature
 
-    Note over BP: 2. Preparación del Backup
-    BP->>SC: Conectar a Source InfluxDB
-    BP->>DC: Conectar a Dest InfluxDB
-    BP->>DC: Crear base de datos destino
+    W1->>I: "SELECT last_timestamp FROM Irradiance"
+    I-->>W1: 2023-12-01T10:30:00Z (solo Irradiance) CORRECTO
 
-    Note over BP: 3. Análisis de Medición
-    BP->>SC: get_field_keys("ForecastingWeather")
-    SC-->>BP: {WRF_continuous_Irradiance_W_m2: numeric, WRF_continuous_Temperature_2m_degC: numeric}
-    BP->>BP: _filter_fields() → Solo campos configurados
+    W2->>I: "SELECT last_timestamp FROM Temperature"
+    I-->>W2: 2023-11-28T15:45:00Z (solo Temperature) CORRECTO
 
-    Note over BP: 4. Procesamiento Paralelo
-    BP->>TPE: Crear ThreadPoolExecutor(max_workers=4)
-
-    loop Para cada campo filtrado
-        BP->>TPE: submit(_backup_single_field, campo, T_ID)
+    parallel
+        W1->>T: Procesa Irradiance desde 10:30
+    and
+        W2->>T: Procesa Temperature desde 15:45
     end
+```
 
-    Note over T1, T2: 5. Procesamiento Independiente por Campo
+### Implementación del Aislamiento
 
-    par Campo 1: WRF_continuous_Irradiance_W_m2
-        T1->>DC: get_field_last_timestamp("Irradiance")
-        DC-->>T1: 2023-12-01T10:30:00Z
-        T1->>T1: Calcular start_time = timestamp + 1μs
-        T1->>SC: query_data(campo="Irradiance", start_time)
-        SC-->>T1: [datos desde 2023-12-01T10:30:00.000001Z]
-        T1->>DC: write_data(datos)
-        T1-->>TPE: SUCCESS: 1500 registros
-    and Campo 2: WRF_continuous_Temperature_2m_degC
-        T2->>DC: get_field_last_timestamp("Temperature")
-        DC-->>T2: 2023-11-28T15:45:00Z
-        T2->>T2: Calcular start_time = timestamp + 1μs
-        T2->>SC: query_data(campo="Temperature", start_time)
-        SC-->>T2: [datos desde 2023-11-28T15:45:00.000001Z]
-        T2->>DC: write_data(datos)
-        T2-->>TPE: SUCCESS: 2300 registros
-    end
+```python
+class FieldWorker:
+    def __init__(self, measurement: str, field: str):
+        self.measurement = measurement
+        self.field = field
+        self.last_timestamp = None  # Estado aislado por campo
 
-    Note over TPE: 6. Recolección de Resultados
-    TPE->>BP: as_completed() → Resultados por campo
-    BP->>BP: _update_parallel_stats()
-    BP->>BP: Generar resumen
+    def get_last_timestamp(self) -> Optional[datetime]:
+        """Obtiene el último timestamp específico para este campo"""
+        query = f"""
+        SELECT last({self.field}), time
+        FROM {self.measurement}
+        WHERE {self.field} IS NOT NULL
+        """
+        # Solo para este campo específico
+        return self.client.query(query)
 
-    Note over BP: 7. Finalización
-    BP-->>M: {success: true, stats: {...}}
-    M->>M: Mostrar resumen final
+    def process_field_data(self):
+        """Procesa solo datos de este campo específico"""
+        start_time = self.get_last_timestamp() or self.config_start_time
+
+        query = f"""
+        SELECT time, {self.field}
+        FROM {self.measurement}
+        WHERE time > '{start_time}'
+        AND {self.field} IS NOT NULL
+        ORDER BY time ASC
+        """
+
+        # Procesamiento aislado
+        for batch in self.client.query_chunked(query):
+            self.process_batch(batch)
 ```
 
 ---
 
-## 🔧 **Configuración Detallada**
+## **Procesamiento Paralelo Campo por Campo**
 
-### **Estructura de Proyecto**
-
-```
-backup-influxdb/
-├── main.py                          # Orchestrator principal
-├── src/                            # Módulos del sistema
-│   ├── backup_processor.py         # Procesador campo por campo
-│   ├── config_manager.py          # Gestor de configuración
-│   ├── influxdb_client.py         # Cliente InfluxDB con get_field_last_timestamp()
-│   ├── logger_manager.py          # Logging thread-safe
-│   ├── apscheduler_backup.py      # Scheduler para modo incremental
-│   └── utils.py                   # Utilidades
-├── config/                        # Configuraciones independientes
-│   ├── irr.yaml                   # Backup de campo Irradiance
-│   ├── temp.yaml                  # Backup de campo Temperature
-│   └── backup_config.yaml.template # Template para nuevas configuraciones
-├── volumes/
-│   └── logs/                      # Logs con identificadores por thread
-└── README.md                      # Esta documentación
-```
-
-### **Configuraciones Actuales**
-
-#### **irr.yaml** - Backup de Irradiancia
-```yaml
-measurements:
-  specific:
-    ForecastingWeather:
-      fields:
-        include: [WRF_continuous_Irradiance_W_m2]  # Solo irradiancia
-
-options:
-  backup_mode: incremental
-  parallel_workers: 1                             # 1 campo = 1 worker
-  incremental:
-    schedule: "* * * * *"                         # Cada minuto
-  loki:
-    tags:
-      config: "irr.yaml"                          # Tag único para logs
-```
-
-#### **temp.yaml** - Backup de Temperatura
-```yaml
-measurements:
-  specific:
-    ForecastingWeather:
-      fields:
-        include: [WRF_continuous_Temperature_2m_degC]  # Solo temperatura
-
-options:
-  backup_mode: incremental
-  parallel_workers: 1                               # 1 campo = 1 worker
-  incremental:
-    schedule: "* * * * *"                           # Cada minuto
-  loki:
-    tags:
-      config: "temp.yaml"                           # Tag único para logs
-```
-
-### **Parámetros de Paralelización**
-
-| Parámetro | Descripción | Valores Recomendados |
-|-----------|-------------|---------------------|
-| `parallel_workers` | Número de hilos para procesar campos | `1`: Secuencial (máxima seguridad)<br/>`2-4`: Sistemas normales<br/>`4-8`: Servidores potentes<br/>`8-16`: Hardware dedicado |
-
----
-
-## 🔍 **Prevención de Contaminación Cruzada**
-
-### **Problema Original Resuelto**
-
-**❌ ANTES** (Contaminación):
-```mermaid
-sequenceDiagram
-    participant I as irr.yaml
-    participant T as temp.yaml
-    participant DB as InfluxDB
-
-    Note over I, T: Problema: Timestamps globales por medición
-
-    I->>DB: get_last_timestamp("ForecastingWeather")
-    Note right of DB: Devuelve timestamp de CUALQUIER campo
-    DB-->>I: 2023-12-01T10:30:00Z (del campo Temperature)
-    I->>I: Inicia desde timestamp de Temperature ❌
-
-    T->>DB: get_last_timestamp("ForecastingWeather")
-    DB-->>T: 2023-12-01T10:30:00Z (actualizado por irr.yaml)
-    T->>T: Se salta datos de Temperature ❌
-```
-
-**✅ AHORA** (Aislamiento Completo):
-```mermaid
-sequenceDiagram
-    participant I as irr.yaml
-    participant T as temp.yaml
-    participant DB as InfluxDB
-
-    Note over I, T: Solución: Timestamps específicos por campo
-
-    I->>DB: get_field_last_timestamp("ForecastingWeather", "WRF_continuous_Irradiance_W_m2")
-    DB-->>I: 2023-12-01T10:30:00Z (solo Irradiance) ✅
-    I->>I: Procesa solo desde su último timestamp
-
-    T->>DB: get_field_last_timestamp("ForecastingWeather", "WRF_continuous_Temperature_2m_degC")
-    DB-->>T: 2023-11-28T15:45:00Z (solo Temperature) ✅
-    T->>T: Procesa desde su propio timestamp independiente
-```
-
-### **Funcionamiento del Aislamiento**
+### Arquitectura de Workers
 
 ```mermaid
 graph TB
-    subgraph "Configuración irr.yaml"
-        A1[Campo: WRF_continuous_Irradiance_W_m2]
-        A2[Timestamp específico: 2023-12-01T10:30:00Z]
-        A3[Procesa desde: 2023-12-01T10:30:00.000001Z]
+    subgraph "🎯 BackupProcessor"
+        BP[Coordinador Principal]
+        Q[Cola de Tareas]
+        M[Monitor de Progreso]
     end
 
-    subgraph "Configuración temp.yaml"
-        B1[Campo: WRF_continuous_Temperature_2m_degC]
-        B2[Timestamp específico: 2023-11-28T15:45:00Z]
-        B3[Procesa desde: 2023-11-28T15:45:00.000001Z]
+    subgraph "⚡ Pool de Workers"
+        W1[Worker 1<br/>temperature.value]
+        W2[Worker 2<br/>temperature.quality]
+        W3[Worker 3<br/>pressure.value]
+        W4[Worker 4<br/>pressure.status]
     end
 
-    subgraph "Base de Datos Destino"
-        C[ForecastingWeather]
-        C1[Irradiance: último = 2023-12-01T10:30:00Z]
-        C2[Temperature: último = 2023-11-28T15:45:00Z]
-        C3[Humidity: último = 2023-12-10T08:15:00Z]
+    subgraph "💾 Recursos Compartidos"
+        CP[Pool Conexiones]
+        MM[Memory Manager]
+        LG[Logger]
     end
 
-    A1 --> A2
-    A2 --> A3
-    B1 --> B2
-    B2 --> B3
+    subgraph "📊 Base de Datos"
+        SRC[(Source InfluxDB)]
+        TGT[(Target InfluxDB)]
+    end
 
-    A2 -.->|get_field_last_timestamp| C1
-    B2 -.->|get_field_last_timestamp| C2
+    BP --> Q
+    Q --> W1
+    Q --> W2
+    Q --> W3
+    Q --> W4
 
-    style A1 fill:#e1f5fe
-    style B1 fill:#f3e5f5
-    style C1 fill:#e1f5fe
-    style C2 fill:#f3e5f5
-    style C3 fill:#e8f5e8
+    W1 --> CP
+    W2 --> CP
+    W3 --> CP
+    W4 --> CP
+
+    CP --> SRC
+    CP --> TGT
+
+    W1 --> MM
+    W2 --> MM
+    W3 --> MM
+    W4 --> MM
+
+    W1 --> LG
+    W2 --> LG
+    W3 --> LG
+    W4 --> LG
+
+    M --> BP
+
+    style BP fill:#e3f2fd
+    style W1 fill:#e8f5e8
+    style W2 fill:#e8f5e8
+    style W3 fill:#e8f5e8
+    style W4 fill:#e8f5e8
+    style CP fill:#fff3e0
+    style SRC fill:#f3e5f5
+    style TGT fill:#f3e5f5
 ```
 
 ---
 
-## ⚡ **Procesamiento Paralelo Campo por Campo**
+## **Guía de Uso**
 
-### **Diagrama de Threads Independientes**
-
-```mermaid
-gantt
-    title Procesamiento Paralelo de Campos (parallel_workers: 4)
-    dateFormat X
-    axisFormat %s
-
-    section Thread T01
-    Campo: Irradiance     :active, t1, 0, 8
-
-    section Thread T02
-    Campo: Temperature    :active, t2, 1, 6
-
-    section Thread T03
-    Campo: Humidity       :active, t3, 2, 7
-
-    section Thread T04
-    Campo: Pressure       :active, t4, 3, 5
-
-    section Secuencial (sin paralelización)
-    Todos los campos      :crit, seq, 0, 26
-```
-
-### **Métricas de Paralelización**
-
-El sistema genera automáticamente métricas detalladas:
-
-```
-Parallelization metrics:
-  • Workers used: 4/4
-  • Avg processing time: 6.2s
-  • Parallel efficiency: 78.5%
-  • Thread utilization: [T01, T02, T03, T04]
-
-Field Results Summary:
-  • Total fields: 4
-  • Processed: 4
-  • Skipped: 0
-  • Failed: 0
-  • Total records: 15,847
-```
-
----
-
-## 🚀 **Guía de Uso**
-
-### **1. Instalación**
+### Instalación
 
 ```bash
-# Clonar repositorio
-git clone <repository-url>
+# Clonar el repositorio
+git clone https://github.com/usuario/backup-influxdb.git
 cd backup-influxdb
 
-# Crear estructura de directorios
-mkdir -p volumes/logs
+# Crear entorno virtual
+python -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
 
 # Instalar dependencias
 pip install -r requirements.txt
+
+# Configurar archivo de configuración
+cp config/backup_config.yaml.template config/backup_config.yaml
+# Editar config/backup_config.yaml con tus configuraciones
 ```
 
-### **2. Configuración**
+### Configuración Básica
 
-```bash
-# Copiar template para nueva configuración
-cp config/backup_config.yaml.template config/mi_backup.yaml
+1. **Configurar conexiones de base de datos**:
+```yaml
+databases:
+  source:
+    host: "tu-influxdb-source.com"
+    port: 8086
+    username: "tu_usuario"
+    password: "tu_password"
+    database: "tu_database"
 
-# Editar configuración
-vim config/mi_backup.yaml
+  backup:
+    host: "tu-influxdb-backup.com"
+    port: 8086
+    username: "backup_usuario"
+    password: "backup_password"
+    database: "backup_database"
 ```
 
-### **3. Ejecución**
-
-#### **Modo Desarrollo** (validar configuraciones)
-```bash
-python main.py --validate-only
+2. **Definir mediciones y campos**:
+```yaml
+backup:
+  measurements:
+    - name: "sensor_data"
+      fields: ["temperature", "humidity", "pressure"]
+      start_time: "2023-01-01T00:00:00Z"
 ```
 
-#### **Modo Producción** (ejecutar backups)
+### Ejecución
+
 ```bash
-python main.py --config /config --verbose
+# Ejecución simple
+python main.py --config config/backup_config.yaml
+
+# Con logging detallado
+python main.py --config config/backup_config.yaml --log-level DEBUG
+
+# Backup específico por medición
+python main.py --config config/backup_config.yaml --measurement sensor_data
+
+# Backup por rango de fechas
+python main.py --config config/backup_config.yaml \
+  --start-time "2023-01-01T00:00:00Z" \
+  --end-time "2023-01-31T23:59:59Z"
 ```
 
-#### **Con Docker**
+---
+
+## **Ejemplos de Configuración**
+
+### Configuración Básica para IoT
+
+```yaml
+version: "1.0"
+app_name: "IoT Sensors Backup"
+
+databases:
+  source:
+    host: "iot-influxdb.local"
+    port: 8086
+    database: "iot_sensors"
+
+  backup:
+    host: "backup-influxdb.local"
+    port: 8086
+    database: "iot_sensors_backup"
+
+backup:
+  measurements:
+    - name: "temperature_sensors"
+      fields: ["value", "quality_flag"]
+      start_time: "2023-01-01T00:00:00Z"
+
+    - name: "humidity_sensors"
+      fields: ["value", "calibration_offset"]
+      start_time: "2023-01-01T00:00:00Z"
+
+processing:
+  max_workers: 2
+  batch_size: 500
+  batch_interval: 0.2
+```
+
+### Configuración Avanzada para Producción
+
+```yaml
+version: "1.0"
+app_name: "Production Backup System"
+
+logging:
+  level: "INFO"
+  handlers:
+    file:
+      enabled: true
+      filename: "logs/backup_{timestamp}.log"
+      max_bytes: 52428800  # 50MB
+      backup_count: 10
+
+databases:
+  source:
+    host: "prod-influxdb-cluster.com"
+    port: 8086
+    username: "backup_service"
+    password: "${INFLUX_PASSWORD}"
+    database: "production_metrics"
+    ssl: true
+    verify_ssl: true
+    timeout: 60
+    retries: 5
+
+processing:
+  max_workers: 8
+  batch_size: 2000
+  worker_memory_limit: 512
+  operation_timeout: 600
+
+backup:
+  measurements:
+    - name: "system_metrics"
+      fields: ["cpu_usage", "memory_usage", "disk_io", "network_io"]
+      start_time: "2023-01-01T00:00:00Z"
+
+  time_chunks:
+    size: "6h"
+    overlap: "5m"
+
+  retry:
+    max_attempts: 5
+    backoff_factor: 3
+    max_backoff: 300
+
+scheduler:
+  enabled: true
+  jobs:
+    - id: "hourly_incremental"
+      trigger: "cron"
+      minute: 0
+
+    - id: "daily_full_check"
+      trigger: "cron"
+      hour: 3
+      minute: 0
+
+monitoring:
+  metrics:
+    enabled: true
+    interval: 15
+
+  alerts:
+    enabled: true
+    thresholds:
+      error_rate: 0.02
+      memory_usage: 0.85
+      duration: 7200
+```
+
+---
+
+## **Configuración Avanzada**
+
+### Variables de Entorno
+
 ```bash
+# Archivo .env
+INFLUX_SOURCE_HOST=localhost
+INFLUX_SOURCE_PORT=8086
+INFLUX_SOURCE_USER=admin
+INFLUX_SOURCE_PASS=secret123
+
+INFLUX_BACKUP_HOST=localhost
+INFLUX_BACKUP_PORT=8087
+INFLUX_BACKUP_USER=backup
+INFLUX_BACKUP_PASS=backup456
+
+# Configuración de logging
+LOG_LEVEL=INFO
+LOG_FILE_PATH=logs/
+LOG_MAX_SIZE=10MB
+LOG_BACKUP_COUNT=5
+
+# Configuración de procesamiento
+MAX_WORKERS=4
+BATCH_SIZE=1000
+MEMORY_LIMIT=256MB
+OPERATION_TIMEOUT=300
+```
+
+### Uso en Docker
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+# Configuración por defecto
+ENV LOG_LEVEL=INFO
+ENV MAX_WORKERS=4
+ENV BATCH_SIZE=1000
+
+CMD ["python", "main.py", "--config", "config/backup_config.yaml"]
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  backup-service:
+    build: .
+    environment:
+      - INFLUX_SOURCE_HOST=influxdb-source
+      - INFLUX_BACKUP_HOST=influxdb-backup
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      - influxdb-source
+      - influxdb-backup
+```
+
+---
+
+## **Troubleshooting**
+
+### Problemas Comunes
+
+1. **Error de conexión a InfluxDB**
+```
+ERROR: Could not connect to InfluxDB at localhost:8086
+```
+**Solución**: Verificar que InfluxDB esté ejecutándose y sea accesible
+```bash
+curl -i http://localhost:8086/ping
+```
+
+2. **Memoria insuficiente**
+```
+WARNING: Worker memory limit exceeded (256MB)
+```
+**Solución**: Ajustar configuración de memoria o reducir batch_size
+```yaml
+processing:
+  worker_memory_limit: 512  # Aumentar límite
+  batch_size: 500          # Reducir tamaño de lote
+```
+
+3. **Timeout en operaciones**
+```
+ERROR: Operation timeout after 300 seconds
+```
+**Solución**: Aumentar timeout o dividir en chunks más pequeños
+```yaml
+processing:
+  operation_timeout: 600
+backup:
+  time_chunks:
+    size: "30m"  # Chunks más pequeños
+```
+
+4. **Contaminación de timestamps**
+```
+WARNING: Timestamp inconsistency detected
+```
+**Solución**: El sistema previene esto automáticamente con aislamiento de campos
+
+### Logging y Depuración
+
+```python
+# Activar logging detallado
+import logging
+logging.getLogger('influxdb_backup').setLevel(logging.DEBUG)
+
+# Ver progreso en tiempo real
+python main.py --config config/backup_config.yaml --verbose
+
+# Verificar configuración
+python -c "
+from src.classes.config_manager import ConfigManager
+config = ConfigManager('config/backup_config.yaml')
+print(config.get_summary())
+"
+```
+
+### Verificación de Integridad
+
+```python
+# Script de verificación post-backup
+from src.classes.influxdb_client import InfluxDBClient
+
+source = InfluxDBClient(source_config)
+backup = InfluxDBClient(backup_config)
+
+# Comparar conteos por campo
+for measurement in measurements:
+    for field in fields:
+        source_count = source.count_field_records(measurement, field)
+        backup_count = backup.count_field_records(measurement, field)
+        print(f"{measurement}.{field}: {source_count} vs {backup_count}")
+```
+
+---
+
+## **Monitoreo y Métricas**
+
+### Métricas Disponibles
+
+- **Rendimiento**: Records/segundo, memoria utilizada, tiempo de ejecución
+- **Calidad**: Tasa de errores, reintentos, datos perdidos
+- **Sistema**: CPU, memoria, conexiones de red
+- **Negocio**: Campos procesados, mediciones completadas, cobertura temporal
+
+### Dashboard de Monitoreo
+
+```python
+# Métricas en tiempo real
+{
+    "performance": {
+        "records_per_second": 1250,
+        "memory_usage_mb": 180,
+        "active_workers": 4,
+        "queue_size": 0
+    },
+    "quality": {
+        "error_rate": 0.01,
+        "retry_count": 3,
+        "success_rate": 0.99
+    },
+    "progress": {
+        "measurements_completed": 8,
+        "measurements_total": 10,
+        "estimated_completion": "2023-12-01T14:30:00Z"
+    }
+}
+```
+
+### Alertas Automáticas
+
+```yaml
+monitoring:
+  alerts:
+    - name: "high_error_rate"
+      condition: "error_rate > 0.05"
+      action: "email"
+      recipients: ["admin@company.com"]
+
+    - name: "memory_pressure"
+      condition: "memory_usage > 0.90"
+      action: "reduce_workers"
+
+    - name: "long_running_job"
+      condition: "duration > 3600"
+      action: "notification"
+```
+
+---
+
+## **Flujo de Desarrollo**
+
+### Estructura del Proyecto
+
+```
+backup-influxdb/
+├── src/
+│   ├── classes/
+│   │   ├── backup_orchestrator.py    # Orquestador principal
+│   │   ├── backup_processor.py       # Procesador con workers
+│   │   ├── config_manager.py         # Gestión de configuración
+│   │   ├── influxdb_client.py        # Cliente InfluxDB
+│   │   ├── logger_manager.py         # Sistema de logging
+│   │   └── apscheduler_backup.py     # Programación automática
+│   ├── utils.py                      # Utilidades
+│   └── __init__.py
+├── config/
+│   ├── backup_config.yaml.template   # Plantilla de configuración
+│   └── backup_config.yaml           # Configuración actual
+├── test/
+│   ├── unit/                        # Tests unitarios
+│   ├── integration/                 # Tests de integración
+│   └── performance/                 # Tests de rendimiento
+├── logs/                           # Logs del sistema
+├── docs/                           # Documentación
+├── scripts/                        # Scripts de utilidad
+├── main.py                         # Punto de entrada
+├── requirements.txt                # Dependencias
+├── Dockerfile                      # Imagen Docker
+├── docker-compose.yaml            # Orquestación
+└── README.md                       # Documentación principal
+```
+
+### Comandos de Desarrollo
+
+```bash
+# Tests
+python -m pytest test/ -v
+python -m pytest test/unit/ -v
+python -m pytest test/integration/ -v --slow
+
+# Linting
+flake8 src/
+black src/
+isort src/
+
+# Coverage
+python -m pytest test/ --cov=src --cov-report=html
+
+# Profiling
+python -m cProfile -s cumtime main.py --config config/backup_config.yaml
+
+# Docker
+docker build -t backup-influxdb .
 docker-compose up -d
+docker-compose logs -f backup-service
 ```
 
-### **4. Monitoreo**
-
-#### **Logs por Thread**
-```bash
-# Ver logs de configuración específica
-tail -f volumes/logs/irr.yaml/backup.log
-
-# Buscar logs de thread específico
-grep "\[T01\]" volumes/logs/temp.yaml/backup.log
-```
-
-#### **Métricas en Grafana**
-- URL: `http://localhost:3000`
-- Usuario: `admin`
-- Contraseña: `password`
-- Dashboard: "InfluxDB Backup Metrics"
-
----
-
-## 📊 **Ejemplos de Configuración**
-
-### **Configuración de Alto Rendimiento** (Múltiples Campos)
-
-```yaml
-# config/high_performance.yaml
-measurements:
-  specific:
-    WeatherData:
-      fields:
-        include: [
-          temperature, humidity, pressure, wind_speed,
-          wind_direction, rainfall, solar_radiation, uv_index
-        ]
-
-options:
-  parallel_workers: 8          # 8 campos en paralelo
-  days_of_pagination: 1        # Chunks pequeños para mayor seguridad
-  field_obsolete_threshold: "3M"
-
-  incremental:
-    schedule: "0 */6 * * *"     # Cada 6 horas
-```
-
-### **Configuración de Máxima Seguridad** (Campo Individual)
-
-```yaml
-# config/critical_data.yaml
-measurements:
-  specific:
-    CriticalMetrics:
-      fields:
-        include: [critical_sensor_reading]  # Solo un campo crítico
-
-options:
-  parallel_workers: 1          # Procesamiento secuencial
-  days_of_pagination: 1        # Chunks de 1 día
-  retries: 5                   # 5 intentos en caso de error
-
-  incremental:
-    schedule: "* * * * *"       # Cada minuto
-```
-
-### **Configuración por Rango** (Backup Histórico)
-
-```yaml
-# config/historical_backup.yaml
-options:
-  backup_mode: range
-  parallel_workers: 16         # Máximo paralelismo para histórico
-
-  range:
-    start_date: "2023-01-01T00:00:00Z"
-    end_date: "2023-12-31T23:59:59Z"
-```
-
----
-
-## 🔧 **Configuración Avanzada**
-
-### **Parámetros de Rendimiento**
-
-| Parámetro | Descripción | Valor por Defecto | Recomendación |
-|-----------|-------------|-------------------|---------------|
-| `parallel_workers` | Hilos para campos | `4` | = Número de campos a procesar |
-| `days_of_pagination` | Días por chunk | `7` | `1-7` según volumen de datos |
-| `timeout_client` | Timeout HTTP (seg) | `20` | `20-60` según latencia |
-| `retries` | Reintentos por error | `3` | `3-5` para entornos inestables |
-
-### **Optimización por Escenario**
-
-#### **Pocos Campos, Alto Volumen**
-```yaml
-parallel_workers: 2-4        # Pocos threads pero eficientes
-days_of_pagination: 1        # Chunks pequeños
-timeout_client: 60           # Timeout largo para grandes consultas
-```
-
-#### **Muchos Campos, Bajo Volumen**
-```yaml
-parallel_workers: 8-16       # Muchos threads para paralelismo
-days_of_pagination: 30       # Chunks grandes
-timeout_client: 20           # Timeout normal
-```
-
-#### **Datos Críticos**
-```yaml
-parallel_workers: 1          # Secuencial para máxima seguridad
-retries: 5                   # Muchos reintentos
-field_obsolete_threshold: "" # Sin filtrado por obsolescencia
-```
-
----
-
-## 🔍 **Troubleshooting**
-
-### **Problemas Comunes**
-
-#### **1. Contaminación entre Configuraciones**
-```bash
-# Síntoma: Configuraciones se saltan datos
-# Causa: Tags de Loki duplicados o nombres de campos incorrectos
-
-# Solución:
-# 1. Verificar tags únicos en loki.tags.config
-# 2. Verificar campos específicos en measurements.specific.*.fields.include
-```
-
-#### **2. Bajo Rendimiento**
-```bash
-# Síntoma: Procesamiento lento
-# Causa: parallel_workers demasiado bajo
-
-# Solución:
-# 1. Aumentar parallel_workers según número de campos
-# 2. Monitorear uso de CPU y memoria
-# 3. Ajustar days_of_pagination
-```
-
-#### **3. Errores de Conexión**
-```bash
-# Síntoma: "Failed to establish connections"
-# Causa: InfluxDB no disponible
-
-# Solución:
-# 1. Verificar conectividad: curl http://influxdb:8086/ping
-# 2. Revisar credenciales en configuración
-# 3. Aumentar initial_connection_retry_delay
-```
-
-### **Logs de Depuración**
-
-```bash
-# Habilitar debug completo
-python main.py --verbose
-
-# Ver threads específicos
-grep "\[T01\]" volumes/logs/*/backup.log
-
-# Monitorear estadísticas de paralelización
-grep "Parallelization metrics" volumes/logs/*/backup.log
-```
-
----
-
-## 📈 **Monitoreo y Métricas**
-
-### **Dashboard de Grafana**
-
-El sistema incluye dashboards preconfigurados:
-
-1. **Backup Overview**: Estado general de todos los procesos
-2. **Field Processing**: Métricas por campo individual
-3. **Parallel Efficiency**: Estadísticas de paralelización
-4. **Error Analysis**: Análisis de fallos por thread
-
-### **Métricas Clave**
-
-- **Records Transferred**: Registros transferidos por configuración
-- **Parallel Efficiency**: Eficiencia del paralelismo (0-100%)
-- **Thread Utilization**: Uso de threads por proceso
-- **Field Processing Time**: Tiempo promedio por campo
-- **Error Rate**: Porcentaje de errores por configuración
-
----
-
-## 🔄 **Flujo de Desarrollo**
-
-### **Agregar Nueva Configuración**
-
-1. **Crear archivo de configuración**:
-   ```bash
-   cp config/backup_config.yaml.template config/nueva_config.yaml
-   ```
-
-2. **Configurar campos específicos**:
-   ```yaml
-   measurements:
-     specific:
-       TuMedicion:
-         fields:
-           include: [tu_campo_especifico]
-   ```
-
-3. **Configurar paralelización**:
-   ```yaml
-   options:
-     parallel_workers: 2  # Según número de campos
-   ```
-
-4. **Validar configuración**:
-   ```bash
-   python main.py --validate-only
-   ```
-
-5. **Ejecutar en modo test**:
-   ```bash
-   python main.py --config /config
-   ```
-
-### **Testing**
-
-```bash
-# Tests unitarios
-pytest test/unit/
-
-# Tests de integración
-pytest test/integration/
-
-# Test completo del sistema
-python test/run_tests.py
-```
-
----
-
-## 📚 **Referencias Técnicas**
-
-### **Tecnologías Utilizadas**
-
-- **Python 3.8+**: Lenguaje principal
-- **InfluxDB 1.8**: Base de datos temporal
-- **ThreadPoolExecutor**: Paralelización de threads
-- **APScheduler**: Programación de tareas
-- **PyYAML**: Parsing de configuraciones
-- **Docker/Docker Compose**: Containerización
-- **Grafana**: Visualización de métricas
-- **Loki**: Logging centralizado
-
-### **Algoritmos Implementados**
-
-1. **Timestamp Field-Specific**: `get_field_last_timestamp(db, measurement, field)`
-2. **Parallel Field Processing**: ThreadPoolExecutor con as_completed()
-3. **Cross-Contamination Prevention**: Timestamps independientes por campo
-4. **Parallel Efficiency Calculation**: (sequential_time / parallel_time / workers) * 100
-
-### **Patrones de Diseño**
-
-- **Factory Pattern**: Creación de clientes InfluxDB
-- **Observer Pattern**: Sistema de logging con múltiples handlers
-- **Strategy Pattern**: Diferentes modos de backup (incremental/range)
-- **Template Pattern**: Estructura común de configuración YAML
-
----
-
-## 📄 **Licencia**
-
-Este proyecto está licenciado bajo la [MIT License](LICENSE).
-
----
-
-## 🤝 **Contribución**
-
-1. Fork del proyecto
-2. Crear rama para feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit de cambios (`git commit -am 'Agregar nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+### Contribución
+
+1. Fork del repositorio
+2. Crear rama de feature: `git checkout -b feature/nueva-funcionalidad`
+3. Commit de cambios: `git commit -am 'Agregar nueva funcionalidad'`
+4. Push a la rama: `git push origin feature/nueva-funcionalidad`
 5. Crear Pull Request
 
----
+### Consideraciones de Seguridad
 
-## 📞 **Soporte**
+- Nunca hardcodear credenciales en el código
+- Usar variables de entorno para información sensible
+- Validar y sanitizar todas las entradas
+- Implementar logging de auditoría para operaciones críticas
+- Mantener dependencias actualizadas
 
-- **Documentación**: [README.md](README.md)
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
-- **Wiki**: [GitHub Wiki](https://github.com/your-repo/wiki)
+### Tips de Rendimiento
 
----
+- Ajustar `max_workers` según CPU disponible
+- Optimizar `batch_size` para tu caso de uso
+- Monitorear uso de memoria con `worker_memory_limit`
+- Usar chunks temporales apropiados para el volumen de datos
+- Implementar pooling de conexiones para múltiples bases
 
-**🚀 Sistema de Backup InfluxDB - Procesamiento Campo por Campo con Paralelización Avanzada**
+**Sistema de Backup InfluxDB - Procesamiento Campo por Campo con Paralelización Avanzada**

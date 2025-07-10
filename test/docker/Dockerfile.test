@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir -r requirements-test.txt
 COPY . /app/
 
 # Crear directorios necesarios
-RUN mkdir -p /app/test_results
+RUN mkdir -p /app/test/test_results
 RUN mkdir -p /app/test_logs
 RUN mkdir -p /app/test_data
 

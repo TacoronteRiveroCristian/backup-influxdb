@@ -78,6 +78,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "docker: marca los tests que requieren Docker"
     )
+    config.addinivalue_line(
+        "markers", "performance: marca los tests de rendimiento y benchmarks"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -88,3 +91,8 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.integration)
         if "docker" in item.fspath.basename:
             item.add_marker(pytest.mark.docker)
+        if (
+            "performance" in item.fspath.basename
+            or "benchmark" in item.fspath.basename
+        ):
+            item.add_marker(pytest.mark.performance)

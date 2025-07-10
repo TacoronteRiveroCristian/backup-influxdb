@@ -18,7 +18,6 @@ services:
       - INFLUXDB_DATA_QUERY_LOG_ENABLED=true
     volumes:
       - influxdb_source_test_data:/var/lib/influxdb
-      - ./influxdb_source.conf:/etc/influxdb/influxdb.conf:ro
     networks:
       - influxdb_test_network
     healthcheck:
@@ -26,7 +25,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    command: influxd -config /etc/influxdb/influxdb.conf
 
   # Servidor InfluxDB destino para testing
   influxdb_destination_test:
@@ -45,7 +43,6 @@ services:
       - INFLUXDB_DATA_QUERY_LOG_ENABLED=true
     volumes:
       - influxdb_destination_test_data:/var/lib/influxdb
-      - ./influxdb_destination.conf:/etc/influxdb/influxdb.conf:ro
     networks:
       - influxdb_test_network
     healthcheck:
@@ -53,7 +50,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    command: influxd -config /etc/influxdb/influxdb.conf
 
   # Servidor InfluxDB adicional para tests avanzados
   influxdb_extra_test:
@@ -70,7 +66,6 @@ services:
       - INFLUXDB_HTTP_AUTH_ENABLED=true
     volumes:
       - influxdb_extra_test_data:/var/lib/influxdb
-      - ./influxdb_extra.conf:/etc/influxdb/influxdb.conf:ro
     networks:
       - influxdb_test_network
     healthcheck:
@@ -78,7 +73,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    command: influxd -config /etc/influxdb/influxdb.conf
 
   # Contenedor para ejecutar los tests
   test_runner:
@@ -88,7 +82,7 @@ services:
     container_name: influxdb_test_runner
     volumes:
       - ../../:/app
-      - test_results:/app/test_results
+      - test_results:/app/test/test_results
     depends_on:
       - influxdb_source_test
       - influxdb_destination_test

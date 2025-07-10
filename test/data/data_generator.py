@@ -183,7 +183,9 @@ class DataGenerator:
             List[datetime]: Lista de timestamps
         """
         # Convertir intervalo a timedelta
-        if interval.endswith("s"):
+        if interval.endswith("ms"):
+            delta = timedelta(milliseconds=int(interval[:-2]))
+        elif interval.endswith("s"):
             delta = timedelta(seconds=int(interval[:-1]))
         elif interval.endswith("m"):
             delta = timedelta(minutes=int(interval[:-1]))
