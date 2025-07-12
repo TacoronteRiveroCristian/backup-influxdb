@@ -18,7 +18,7 @@ coverage.xml
 .coveragerc
 
 # Resultados de tests (nueva ubicación correcta)
-test/test_result/
+**/test_result/
 
 # Archivos temporales de testing
 *.tmp
