@@ -1,0 +1,174 @@
+# =====================================================================================
+# CONFIGURACIÓN DE EJEMPLO - SISTEMA DE BACKUP INFLUXDB
+# =====================================================================================
+# Configuración básica para empezar rápidamente
+# Copia este archivo: cp backup_config.yaml.example backup_config.yaml
+
+# ===================================
+# CONFIGURACIÓN GLOBAL DEL SISTEMA
+# ===================================
+global:
+  network: influxdb-network
+
+# ========================================
+# CONFIGURACIÓN SERVIDOR INFLUXDB ORIGEN
+# ========================================
+source:
+  # URL del servidor InfluxDB origen
+  url: http://sysadmintoolkit-influxdb-dev:8086
+
+  # Configuración SSL/TLS
+  ssl: false
+  verify_ssl: true
+
+  # Bases de datos a respaldar
+  databases:
+    - name: metrics
+      destination: metrics_backup
+    - name: telegraf
+      destination: telegraf_backup
+
+  # Autenticación (dejar vacío si no hay autenticación)
+  user: ""
+  password: ""
+
+  # Agrupamiento de consultas
+  group_by: "1m"
+
+# =========================================
+# CONFIGURACIÓN SERVIDOR INFLUXDB DESTINO
+# =========================================
+destination:
+  # URL del servidor InfluxDB destino
+  url: http://sysadmintoolkit-influxdb-dev:8086
+
+  # Configuración SSL/TLS
+  ssl: false
+  verify_ssl: true
+
+  # Autenticación
+  user: ""
+  password: ""
+
+# =============================================
+# CONFIGURACIÓN DE FILTRADO DE MEDICIONES
+# =============================================
+measurements:
+  # Filtrado global (vacío = todas las mediciones)
+  include: []
+  exclude: []
+
+  # Configuraciones específicas por medición
+  specific: {}
+
+# =============================================
+# CONFIGURACIÓN DE PARALELIZACIÓN
+# =============================================
+parallel:
+  # Número de workers paralelos
+  workers: 4
+
+  # Tamaño de chunks para procesamiento
+  chunk_size: 1000
+
+  # Configuración de reintentos
+  max_retries: 3
+  retry_delay: 5
+
+  # Timeouts
+  timeout: 300
+  connection_timeout: 30
+
+# =============================================
+# CONFIGURACIÓN DE LOGGING
+# =============================================
+logging:
+  # Nivel de log (DEBUG, INFO, WARNING, ERROR)
+  level: INFO
+
+  # Formato de logs
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+
+  # Archivo de log (ruta relativa al contenedor)
+  file: "/var/log/backup_influxdb/backup.log"
+
+  # Rotación de logs
+  rotate: true
+  max_size: 10MB
+  backup_count: 5
+
+# =============================================
+# CONFIGURACIÓN DE PROGRAMACIÓN
+# =============================================
+schedule:
+  # Habilitar programación automática
+  enabled: false
+
+  # Intervalo cron (formato cron)
+  interval: "0 2 * * *"  # Diario a las 2 AM
+
+  # Zona horaria
+  timezone: "UTC"
+
+  # Permitir backups simultáneos
+  overlapping: false
+
+# =============================================
+# CONFIGURACIÓN DE MÉTRICAS
+# =============================================
+metrics:
+  # Habilitar métricas
+  enabled: true
+
+  # Intervalo de reporte
+  report_interval: 60
+
+  # Métricas a reportar
+  include:
+    - records_processed
+    - processing_time
+    - errors_count
+    - memory_usage
+    - cpu_usage
+
+# =============================================
+# CONFIGURACIÓN DE NOTIFICACIONES
+# =============================================
+notifications:
+  # Habilitar notificaciones
+  enabled: false
+
+  # Configuración de email (opcional)
+  email:
+    enabled: false
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    from: ""
+    to: []
+
+  # Configuración de webhook (opcional)
+  webhook:
+    enabled: false
+    url: ""
+    headers: {}
+
+# =============================================
+# CONFIGURACIÓN DE VALIDACIÓN
+# =============================================
+validation:
+  # Habilitar validación de datos
+  enabled: true
+
+  # Tolerancia para comparaciones
+  tolerance: 0.01
+
+  # Validar integridad de datos
+  check_integrity: true
+
+  # Validar timestamps
+  check_timestamps: true
+
+  # Validar tipos de datos
+  check_types: true
