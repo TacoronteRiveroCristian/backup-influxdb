@@ -3,10 +3,10 @@
     "dockerComposeFile": [
         "../docker-compose.yaml"
     ],
-    "service": "sysadmintoolkit-backup-service-dev",
+    "service": "backup-service-dev",
     "workspaceFolder": "/app",
     "runServices": [
-        "sysadmintoolkit-backup-service-dev"
+        "backup-service-dev"
     ],
     "customizations": {
         "vscode": {
