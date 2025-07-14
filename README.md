@@ -84,7 +84,7 @@ Edita `config/backup_config.yaml` con al menos estos valores:
 ```yaml
 # Configuración del servidor origen
 source:
-  url: http://sysadmintoolkit-influxdb-dev:8086  # Para desarrollo
+  url: http://backup-influxdb:8086  # Para desarrollo
   # url: http://tu-servidor-influxdb:8086        # Para producción
 
   databases:
@@ -98,7 +98,7 @@ source:
 
 # Configuración del servidor destino
 destination:
-  url: http://sysadmintoolkit-influxdb-dev:8086  # Puede ser el mismo servidor
+  url: http://backup-influxdb:8086  # Puede ser el mismo servidor
   user: ""
   password: ""
 
@@ -121,7 +121,7 @@ docker network create influxdb-network
 
 ```bash
 # Construir imágenes (solo la primera vez o cuando hay cambios)
-docker-compose build --target development sysadmintoolkit-backup-service-dev
+docker-compose build --target development backup-service-dev
 
 # Levantar todos los servicios de desarrollo
 docker-compose --profile development up -d
@@ -144,20 +144,20 @@ docker-compose --profile development ps
 docker-compose --profile development logs -f
 
 # Ver logs de un servicio específico
-docker-compose --profile development logs -f sysadmintoolkit-backup-service-dev
-docker-compose --profile development logs -f sysadmintoolkit-influxdb-dev
+docker-compose --profile development logs -f backup-service-dev
+docker-compose --profile development logs -f backup-influxdb
 
 # Acceder al contenedor de backup
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
+docker-compose --profile development exec backup-service-dev bash
 
 # Ejecutar backup manualmente
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
+docker-compose --profile development exec backup-service-dev python main.py --config /config
 
 # Validar configuración
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
+docker-compose --profile development exec backup-service-dev python main.py --validate-only
 
 # Ejecutar tests
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python test/run_tests.py
+docker-compose --profile development exec backup-service-dev python test/run_tests.py
 
 # Parar servicios de desarrollo
 docker-compose --profile development down
@@ -170,8 +170,8 @@ docker-compose --profile development down -v
 
 ```bash
 # Si has hecho cambios en el código
-docker-compose build --no-cache --target development sysadmintoolkit-backup-service-dev
-docker-compose --profile development up -d sysadmintoolkit-backup-service-dev
+docker-compose build --no-cache --target development backup-service-dev
+docker-compose --profile development up -d backup-service-dev
 ```
 
 ## 🚀 Entorno de Producción
@@ -180,7 +180,7 @@ docker-compose --profile development up -d sysadmintoolkit-backup-service-dev
 
 ```bash
 # Construir imagen de producción (solo la primera vez o cuando hay cambios)
-docker-compose build --target production sysadmintoolkit-backup-service-prod
+docker-compose build --target production backup-service-prod
 
 # Levantar solo el servicio de backup en producción
 docker-compose --profile production up -d
@@ -204,16 +204,16 @@ El servicio de producción:
 docker-compose --profile production logs -f
 
 # Ejecutar backup manual en producción
-docker-compose --profile production exec sysadmintoolkit-backup-service-prod python main.py --config /config
+docker-compose --profile production exec backup-service-prod python main.py --config /config
 
 # Acceder al contenedor (para debugging)
-docker-compose --profile production exec sysadmintoolkit-backup-service-prod bash
+docker-compose --profile production exec backup-service-prod bash
 
 # Parar servicio de producción
 docker-compose --profile production down
 
 # Reconstruir imagen de producción
-docker-compose build --no-cache --target production sysadmintoolkit-backup-service-prod
+docker-compose build --no-cache --target production backup-service-prod
 ```
 
 ## 📊 Configuración Avanzada
@@ -301,7 +301,7 @@ docker network ls
 docker network inspect influxdb-network
 
 # Ver logs de InfluxDB
-docker-compose --profile development logs sysadmintoolkit-influxdb-dev
+docker-compose --profile development logs backup-influxdb
 ```
 
 #### 3. Error: "Puerto ya en uso"
@@ -329,13 +329,13 @@ docker-compose --profile development up -d
 
 ```bash
 # Verificar configuración dentro del contenedor
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
+docker-compose --profile development exec backup-service-dev python main.py --validate-only
 
 # Test de conectividad
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --test-connection
+docker-compose --profile development exec backup-service-dev python main.py --test-connection
 
 # Ver información del sistema
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --info
+docker-compose --profile development exec backup-service-dev python main.py --info
 
 # Verificar espacio en disco
 docker system df
@@ -361,7 +361,7 @@ docker network create influxdb-network
 docker-compose --profile development up -d
 
 # 4. Ejecutar backup
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
+docker-compose --profile development exec backup-service-dev python main.py --config /config
 ```
 
 ### Ejemplo 2: Backup de Producción Programado
@@ -392,7 +392,7 @@ docker-compose --profile production logs -f
 docker-compose --profile development up -d
 
 # 2. Acceder al contenedor
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
+docker-compose --profile development exec backup-service-dev bash
 
 # 3. Dentro del contenedor:
 python test/run_tests.py              # Ejecutar tests
@@ -503,13 +503,13 @@ docker-compose --profile production logs -f     # Ver logs
 ### Operaciones de Backup
 ```bash
 # Ejecutar backup
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
+docker-compose --profile development exec backup-service-dev python main.py --config /config
 
 # Validar configuración
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
+docker-compose --profile development exec backup-service-dev python main.py --validate-only
 
 # Acceder al contenedor
-docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
+docker-compose --profile development exec backup-service-dev bash
 ```
 
 ### Mantenimiento
@@ -527,7 +527,7 @@ docker-compose --profile development up -d
 
 ### Recursos Adicionales
 
-- **Testing**: `docker-compose --profile development exec sysadmintoolkit-backup-service-dev python test/run_tests.py`
+- **Testing**: `docker-compose --profile development exec backup-service-dev python test/run_tests.py`
 - **Documentación**: `docs/`
 - **Logs**: `volumes/backup_logs/`
 - **Configuración**: `config/backup_config.yaml.template`

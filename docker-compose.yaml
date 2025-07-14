@@ -1,5 +1,5 @@
 ### Shared configuration for all services backup ###
-x-sysadmintoolkit-backup-service: &sysadmintoolkit-backup-service
+x-backup-service: &backup-service
   build:
     context: .
     dockerfile: Dockerfile
@@ -18,9 +18,9 @@ x-sysadmintoolkit-backup-service: &sysadmintoolkit-backup-service
 
 ### Services ###
 services:
-  sysadmintoolkit-influxdb-dev: # InfluxDB server for development/testing
+  backup-influxdb: # InfluxDB server for development/testing
     image: influxdb:1.8
-    container_name: sysadmintoolkit-influxdb-dev
+    container_name: backup-influxdb
     ports:
       - "8086:8086"
     environment:
@@ -33,9 +33,9 @@ services:
     networks:
       - backup-network
 
-  sysadmintoolkit-loki-dev:
+  backup-loki:
     image: grafana/loki
-    container_name: sysadmintoolkit-loki-dev
+    container_name: backup-loki
     user: "root"
     ports:
       - "3100:3100"
@@ -49,9 +49,9 @@ services:
     networks:
       - backup-network
 
-  sysadmintoolkit-grafana-dev: # Grafana server for development/testing
+  backup-grafana: # Grafana server for development/testing
     image: grafana/grafana:latest
-    container_name: sysadmintoolkit-grafana-dev
+    container_name: backup-grafana
     ports:
       - "3000:3000"
     volumes:
@@ -66,9 +66,9 @@ services:
     networks:
       - backup-network
 
-  sysadmintoolkit-backup-service-dev: # Backup service for development
-    container_name: sysadmintoolkit-backup-service-dev
-    <<: *sysadmintoolkit-backup-service
+  backup-service-dev: # Backup service for development
+    container_name: backup-service-dev
+    <<: *backup-service
     build:
       context: .
       dockerfile: Dockerfile
@@ -94,9 +94,9 @@ services:
       - SYS_PTRACE
     privileged: true  # Necesario para acceso completo a Docker
 
-  sysadmintoolkit-backup-service-prod: # Backup service for production
-    container_name: sysadmintoolkit-backup-service-prod
-    <<: *sysadmintoolkit-backup-service
+  backup-service-prod: # Backup service for production
+    container_name: backup-service-prod
+    <<: *backup-service
     build:
       context: .
       dockerfile: Dockerfile
