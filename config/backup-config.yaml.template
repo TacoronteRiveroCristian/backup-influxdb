@@ -179,63 +179,63 @@ measurements:
     # EJEMPLO 2: PROCESAMIENTO DE MEMORIA
     # ========================================
     # Scenario: Quieres toda la memoria EXCEPTO campos de cache
-    memory:
-      fields:
-        include: []  # Todos los campos
-        # Excluir campos de cache que cambian constantemente
-        exclude: [buffer, cached, slab]
-        types: [numeric, string]
+    # memory:
+    #   fields:
+    #     include: []  # Todos los campos
+    #     # Excluir campos de cache que cambian constantemente
+    #     exclude: [buffer, cached, slab]
+    #     types: [numeric, string]
 
     # ========================================
     # EJEMPLO 3: DATOS METEOROLÓGICOS ESPECÍFICOS
     # ========================================
     # Scenario: Solo un campo específico de una medición grande
-    ForecastingWeather:
-      fields:
-        # CAMPO POR CAMPO: Solo procesar temperatura
-        include: [WRF_continuous_Temperature_2m_degC]
-        exclude: []
-        types: [numeric, string, boolean]
+    # ForecastingWeather:
+    #   fields:
+    #     # CAMPO POR CAMPO: Solo procesar temperatura
+    #     include: [WRF_continuous_Temperature_2m_degC]
+    #     exclude: []
+    #     types: [numeric, string, boolean]
 
     # ========================================
     # EJEMPLO 4: MÚLTIPLES CAMPOS EN PARALELO
     # ========================================
     # Scenario: Varios campos de la misma medición procesados en paralelo
-    WeatherStation:
-      fields:
-        # Múltiples campos que se procesarán independientemente
-        include: [
-          temperature,      # Thread T01
-          humidity,         # Thread T02
-          pressure,         # Thread T03
-          wind_speed,       # Thread T04
-          wind_direction,   # Thread T05
-          rainfall,         # Thread T06
-          solar_radiation,  # Thread T07
-          uv_index         # Thread T08
-        ]
-        exclude: []
-        types: [numeric]
+    # WeatherStation:
+    #   fields:
+    #     # Múltiples campos que se procesarán independientemente
+    #     include: [
+    #       temperature,      # Thread T01
+    #       humidity,         # Thread T02
+    #       pressure,         # Thread T03
+    #       wind_speed,       # Thread T04
+    #       wind_direction,   # Thread T05
+    #       rainfall,         # Thread T06
+    #       solar_radiation,  # Thread T07
+    #       uv_index         # Thread T08
+    #     ]
+    #     exclude: []
+    #     types: [numeric]
 
     # ========================================
     # EJEMPLO 5: FILTRADO POR TIPO DE DATO
     # ========================================
     # Scenario: Solo quieres datos numéricos, no strings ni booleanos
-    sensor_data:
-      fields:
-        include: []  # Todos los campos
-        exclude: []
-        types: [numeric]  # Solo datos numéricos
+    # sensor_data:
+    #   fields:
+    #     include: []  # Todos los campos
+    #     exclude: []
+    #     types: [numeric]  # Solo datos numéricos
 
     # ========================================
     # EJEMPLO 6: LOGS Y EVENTOS
     # ========================================
     # Scenario: Procesar logs con datos de texto
-    application_logs:
-      fields:
-        include: [level, message, timestamp, source]
-        exclude: [debug_info, stack_trace]
-        types: [string, boolean]  # Solo texto y flags
+    # application_logs:
+    #   fields:
+    #     include: [level, message, timestamp, source]
+    #     exclude: [debug_info, stack_trace]
+    #     types: [string, boolean]  # Solo texto y flags
 
 # =============================================
 # OPCIONES DE BACKUP Y PARALELIZACIÓN
@@ -269,8 +269,8 @@ options:
     #
     # start_date: "2023-12-01T08:00:00Z"    # Un día específico
     # end_date: "2023-12-01T20:00:00Z"
-    start_date: "2023-01-01T00:00:00Z"
-    end_date: "2023-12-31T23:59:59Z"
+    start_date: ""
+    end_date: ""
 
   # ========================================
   # CONFIGURACIÓN MODO INCREMENTAL
@@ -373,6 +373,8 @@ options:
   # ========================================
   # CONFIGURACIÓN DE LOGGING
   # ========================================
+  # Hay que tener en cuenta el directorio de volumen creado en el docker-compose.yaml
+  # y en el Dockerfile
   log_directory: /var/log/backup_influxdb/
 
   # Rotación automática de logs
@@ -384,7 +386,7 @@ options:
 
   # Configuración Loki (logging centralizado)
   loki:
-    enabled: true
+    enabled: false
     url: "sysadmintoolkit-loki-dev"  # Servidor Loki
     port: 3100
     # IMPORTANTE: Usar tags únicos para distinguir configuraciones
@@ -541,11 +543,5 @@ options:
 #  Configuraciones ejemplo: config/irr.yaml, config/temp.yaml
 #  Troubleshooting: Ver sección "Troubleshooting" en README.md
 #  Métricas: Dashboard Grafana en http://localhost:3000
-#
-# COMANDO ÚTILES:
-# - Validar: python main.py --validate-only
-# - Ejecutar: python main.py --config /config
-# - Debug: python main.py --config /config --verbose
-# - Ver logs: tail -f /var/log/backup_influxdb/*/backup.log
 #
 # =============================================

@@ -9,92 +9,6 @@ Sistema de backup profesional para InfluxDB con procesamiento campo por campo, p
 - **Multi-stage Docker**: Separación clara entre dependencias de desarrollo y producción
 - **Volúmenes persistentes**: Configuración y logs persistentes
 
-## 🚀 Inicio Rápido
-
-### Gestor Automático (Recomendado)
-
-El script `quick-start.sh` proporciona un gestor todo-en-uno que simplifica todas las operaciones:
-
-```bash
-# 📋 Ver todos los comandos disponibles
-./scripts/quick-start.sh help
-
-# 🔧 Configuración inicial completa (solo la primera vez)
-./scripts/quick-start.sh setup development    # Para desarrollo
-./scripts/quick-start.sh setup production     # Para producción
-```
-
-### Comandos Principales
-
-#### Gestión de Servicios
-```bash
-# Iniciar servicios
-./scripts/quick-start.sh start development
-./scripts/quick-start.sh start production
-
-# Parar servicios
-./scripts/quick-start.sh stop development
-./scripts/quick-start.sh stop production
-
-# Reiniciar servicios
-./scripts/quick-start.sh restart development
-./scripts/quick-start.sh restart production
-
-# Estado y recursos del sistema
-./scripts/quick-start.sh status development
-./scripts/quick-start.sh status production
-```
-
-#### Monitoreo y Logs
-```bash
-# Ver logs en tiempo real
-./scripts/quick-start.sh logs development
-./scripts/quick-start.sh logs production
-```
-
-#### Backup y Validación
-```bash
-# Listar configuraciones disponibles
-./scripts/quick-start.sh list-configs
-
-# Ejecutar backup manual
-./scripts/quick-start.sh backup                    # Usa configuración por defecto
-./scripts/quick-start.sh backup mi_config.yaml     # Usa configuración específica
-
-# Validar configuración
-./scripts/quick-start.sh validate                  # Valida configuración por defecto
-./scripts/quick-start.sh validate mi_config.yaml   # Valida configuración específica
-```
-
-#### Acceso al Sistema
-```bash
-# Acceder al contenedor interactivo
-./scripts/quick-start.sh shell development
-./scripts/quick-start.sh shell production
-```
-
-#### Mantenimiento
-```bash
-# Limpiar todo el sistema (contenedores, volúmenes, redes)
-./scripts/quick-start.sh cleanup
-```
-
-### Para Expertos en Docker
-
-Si prefieres usar Docker Compose directamente:
-
-```bash
-# Levantar servicios
-docker-compose --profile development up -d
-docker-compose --profile production up -d
-
-# Parar servicios
-docker-compose --profile development down
-docker-compose --profile production down
-```
-
----
-
 ## 📋 Requisitos Previos
 
 - Docker 20.10+
@@ -106,6 +20,30 @@ docker-compose --profile production down
 # Verificar versiones
 docker --version
 docker-compose --version
+```
+
+## 🧹 Limpiar Servicios Existentes
+
+Si tienes otros servicios corriendo en los mismos puertos, debes limpiarlos antes:
+
+```bash
+# Parar todos los contenedores
+docker stop $(docker ps -aq) 2>/dev/null || true
+
+# Limpiar contenedores que usen los puertos
+docker rm -f $(docker ps -aq --filter "expose=8086" --filter "expose=3000" --filter "expose=3100") 2>/dev/null || true
+
+# Limpiar contenedores por nombre (si existen de instalaciones previas)
+docker rm -f influxdb grafana loki backup-service 2>/dev/null || true
+
+# Limpiar redes que puedan conflictuar
+docker network rm influxdb-network 2>/dev/null || true
+
+# Verificar que los puertos están libres
+netstat -tlnp | grep -E ':8086|:3000|:3100' || echo "Puertos libres"
+
+# Limpiar volúmenes no utilizados (opcional)
+docker volume prune -f
 ```
 
 ## ⚙️ Configuración Inicial
@@ -122,7 +60,24 @@ cp config/backup_config.yaml.template config/backup_config.yaml
 nano config/backup_config.yaml
 ```
 
-### 2. Configuración Básica Mínima
+### 2. Crear Estructura de Directorios
+
+```bash
+# Crear estructura de directorios necesarios
+mkdir -p volumes/backup_logs
+mkdir -p volumes/influxdb/data
+mkdir -p volumes/grafana/data
+mkdir -p volumes/loki/data
+mkdir -p volumes/loki/config
+
+# Configurar permisos
+chmod 755 volumes/backup_logs
+chmod 777 volumes/influxdb/data
+chmod 777 volumes/grafana/data
+chmod 777 volumes/loki/data
+```
+
+### 3. Configuración Básica Mínima
 
 Edita `config/backup_config.yaml` con al menos estos valores:
 
@@ -153,34 +108,26 @@ measurements:
   exclude: []       # Mediciones a excluir
 ```
 
-### 3. Configuración Automática Completa
+### 4. Crear Red Docker
 
 ```bash
-# Ejecutar configuración inicial completa
-./scripts/quick-start.sh setup development
-
-# Esto automáticamente:
-# - Verifica dependencias (Docker, Docker Compose)
-# - Crea directorios de volúmenes
-# - Configura archivos de configuración
-# - Construye imágenes Docker
-# - Crea la red Docker
-# - Inicia los servicios
+# Crear red para comunicación entre contenedores
+docker network create influxdb-network
 ```
 
 ## 🔧 Entorno de Desarrollo
 
-### Configuración y Uso
+### Levantar Servicios de Desarrollo
 
 ```bash
-# Configuración inicial completa
-./scripts/quick-start.sh setup development
+# Construir imágenes (solo la primera vez o cuando hay cambios)
+docker-compose build --target development sysadmintoolkit-backup-service-dev
 
-# Iniciar servicios
-./scripts/quick-start.sh start development
+# Levantar todos los servicios de desarrollo
+docker-compose --profile development up -d
 
-# Ver estado
-./scripts/quick-start.sh status development
+# Verificar que los servicios estén corriendo
+docker-compose --profile development ps
 ```
 
 ### Servicios Disponibles en Desarrollo
@@ -194,34 +141,52 @@ measurements:
 
 ```bash
 # Ver logs en tiempo real
-./scripts/quick-start.sh logs development
+docker-compose --profile development logs -f
 
-# Acceder al contenedor de desarrollo
-./scripts/quick-start.sh shell development
+# Ver logs de un servicio específico
+docker-compose --profile development logs -f sysadmintoolkit-backup-service-dev
+docker-compose --profile development logs -f sysadmintoolkit-influxdb-dev
+
+# Acceder al contenedor de backup
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
 
 # Ejecutar backup manualmente
-./scripts/quick-start.sh backup
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
 
 # Validar configuración
-./scripts/quick-start.sh validate
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
+
+# Ejecutar tests
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python test/run_tests.py
 
 # Parar servicios de desarrollo
-./scripts/quick-start.sh stop development
+docker-compose --profile development down
+
+# Parar y eliminar volúmenes
+docker-compose --profile development down -v
+```
+
+### Reconstruir Imagen de Desarrollo
+
+```bash
+# Si has hecho cambios en el código
+docker-compose build --no-cache --target development sysadmintoolkit-backup-service-dev
+docker-compose --profile development up -d sysadmintoolkit-backup-service-dev
 ```
 
 ## 🚀 Entorno de Producción
 
-### Configuración y Uso
+### Levantar Servicio de Producción
 
 ```bash
-# Configuración inicial completa
-./scripts/quick-start.sh setup production
+# Construir imagen de producción (solo la primera vez o cuando hay cambios)
+docker-compose build --target production sysadmintoolkit-backup-service-prod
 
-# Iniciar servicio
-./scripts/quick-start.sh start production
+# Levantar solo el servicio de backup en producción
+docker-compose --profile production up -d
 
-# Ver estado
-./scripts/quick-start.sh status production
+# Verificar estado
+docker-compose --profile production ps
 ```
 
 ### Características de Producción
@@ -232,17 +197,23 @@ El servicio de producción:
 - Reinicia automáticamente si falla
 - Solo incluye las dependencias necesarias
 
-### Monitoreo en Producción
+### Comandos para Producción
 
 ```bash
 # Ver logs de producción
-./scripts/quick-start.sh logs production
-
-# Verificar estado del contenedor
-./scripts/quick-start.sh status production
+docker-compose --profile production logs -f
 
 # Ejecutar backup manual en producción
-./scripts/quick-start.sh backup
+docker-compose --profile production exec sysadmintoolkit-backup-service-prod python main.py --config /config
+
+# Acceder al contenedor (para debugging)
+docker-compose --profile production exec sysadmintoolkit-backup-service-prod bash
+
+# Parar servicio de producción
+docker-compose --profile production down
+
+# Reconstruir imagen de producción
+docker-compose build --no-cache --target production sysadmintoolkit-backup-service-prod
 ```
 
 ## 📊 Configuración Avanzada
@@ -300,8 +271,6 @@ proyecto/
 │   ├── influxdb/data/               # Datos InfluxDB dev
 │   ├── grafana/data/                # Datos Grafana
 │   └── loki/data/                   # Datos Loki
-├── scripts/
-│   └── quick-start.sh               # Gestor automático
 ├── src/                             # Código fuente
 ├── test/                            # Sistema de testing
 ├── docker-compose.yaml              # Configuración servicios
@@ -330,103 +299,106 @@ curl -i http://localhost:8086/ping
 # Verificar configuración de red
 docker network ls
 docker network inspect influxdb-network
+
+# Ver logs de InfluxDB
+docker-compose --profile development logs sysadmintoolkit-influxdb-dev
 ```
 
-#### 3. Error: "Permission denied en volúmenes"
+#### 3. Error: "Puerto ya en uso"
 ```bash
-# Limpiar y reconfigurar
-./scripts/quick-start.sh cleanup
-./scripts/quick-start.sh setup development
+# Ver qué proceso usa el puerto
+netstat -tlnp | grep 8086
+
+# Parar el proceso si es necesario y limpiar
+docker stop $(docker ps -q --filter "publish=8086")
 ```
 
 #### 4. Servicios no inician
 ```bash
 # Ver logs detallados
-./scripts/quick-start.sh logs development
+docker-compose --profile development logs
 
-# Verificar estado
-./scripts/quick-start.sh status development
-
-# Limpiar y empezar de nuevo
-./scripts/quick-start.sh cleanup
-./scripts/quick-start.sh setup development
+# Limpiar todo y empezar de nuevo
+docker-compose --profile development down -v
+docker system prune -f
+docker network create influxdb-network
+docker-compose --profile development up -d
 ```
 
 ### Comandos de Diagnóstico
 
 ```bash
-# Verificar configuración
-./scripts/quick-start.sh validate
+# Verificar configuración dentro del contenedor
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
 
-# Acceder al contenedor para diagnóstico
-./scripts/quick-start.sh shell development
+# Test de conectividad
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --test-connection
 
-# Dentro del contenedor:
-python main.py --validate-only
-python main.py --test-connection
-python main.py --info
+# Ver información del sistema
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --info
+
+# Verificar espacio en disco
+docker system df
+
+# Ver uso de recursos
+docker stats --no-stream
 ```
 
 ## 📖 Ejemplos de Uso
 
-### Ejemplo 1: Backup Básico
-
-```yaml
-# config/backup_config.yaml
-source:
-  url: http://sysadmintoolkit-influxdb-dev:8086
-  databases:
-    - name: metrics
-      destination: metrics_backup
-
-destination:
-  url: http://sysadmintoolkit-influxdb-dev:8086
-```
+### Ejemplo 1: Backup Básico en Desarrollo
 
 ```bash
-# Configurar y ejecutar
-./scripts/quick-start.sh setup development
-./scripts/quick-start.sh backup
+# 1. Preparar configuración
+cp config/backup_config.yaml.template config/backup_config.yaml
+nano config/backup_config.yaml
+
+# 2. Crear directorios y red
+mkdir -p volumes/{backup_logs,influxdb/data,grafana/data,loki/data}
+docker network create influxdb-network
+
+# 3. Levantar desarrollo
+docker-compose --profile development up -d
+
+# 4. Ejecutar backup
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
 ```
 
-### Ejemplo 2: Backup de Producción con Horarios
-
-```yaml
-# config/backup_config.yaml
-schedule:
-  enabled: true
-  interval: "0 2 * * *"  # Diario a las 2 AM
-
-source:
-  url: http://influxdb-production:8086
-  databases:
-    - name: production_metrics
-      destination: production_metrics_backup
-
-destination:
-  url: http://influxdb-backup:8086
-```
+### Ejemplo 2: Backup de Producción Programado
 
 ```bash
-# Configurar y ejecutar
-./scripts/quick-start.sh setup production
-./scripts/quick-start.sh start production
+# 1. Configurar backup programado
+cp config/backup_config.yaml.template config/backup_config.yaml
+
+# 2. Editar para habilitar schedule
+nano config/backup_config.yaml
+# Añadir:
+# schedule:
+#   enabled: true
+#   interval: "0 2 * * *"
+
+# 3. Levantar producción
+docker network create influxdb-network
+docker-compose --profile production up -d
+
+# 4. Verificar logs
+docker-compose --profile production logs -f
 ```
 
-### Ejemplo 3: Backup con Configuración Específica
+### Ejemplo 3: Desarrollo con Testing
 
 ```bash
-# Crear configuración específica
-cp config/backup_config.yaml.template config/mi_backup.yaml
+# 1. Levantar desarrollo
+docker-compose --profile development up -d
 
-# Editar configuración
-nano config/mi_backup.yaml
+# 2. Acceder al contenedor
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
 
-# Validar configuración
-./scripts/quick-start.sh validate mi_backup.yaml
-
-# Ejecutar backup con configuración específica
-./scripts/quick-start.sh backup mi_backup.yaml
+# 3. Dentro del contenedor:
+python test/run_tests.py              # Ejecutar tests
+python main.py --validate-only       # Validar configuración
+python main.py --config /config      # Ejecutar backup
+exit
 ```
 
 ## 🛡️ Seguridad
@@ -451,12 +423,9 @@ source:
 ```
 
 3. **Limitar acceso a red**:
-```yaml
-# docker-compose.yaml
-networks:
-  backup-network:
-    driver: bridge
-    internal: true  # Solo comunicación interna
+```bash
+# Crear red interna
+docker network create --internal backup-network
 ```
 
 ## 📈 Monitoreo
@@ -469,17 +438,23 @@ networks:
 - Uso de memoria y CPU
 - Estado de conectividad
 
-### Logs Estructurados
+### Comandos de Monitoreo
 
 ```bash
 # Ver logs en tiempo real
-./scripts/quick-start.sh logs development
+docker-compose --profile development logs -f
 
-# Ver logs específicos
+# Ver logs específicos del backup
 tail -f volumes/backup_logs/backup_$(date +%Y%m%d).log
 
 # Buscar errores
 grep -i error volumes/backup_logs/backup_*.log
+
+# Ver recursos en tiempo real
+docker stats
+
+# Estado de contenedores
+docker-compose --profile development ps
 ```
 
 ## 🔄 Actualización
@@ -487,63 +462,76 @@ grep -i error volumes/backup_logs/backup_*.log
 ### Actualizar el Sistema
 
 ```bash
-# Parar servicios
-./scripts/quick-start.sh stop development
+# 1. Parar servicios
+docker-compose --profile development down
 
-# Actualizar código
+# 2. Actualizar código
 git pull origin main
 
-# Reconstruir y reiniciar
-./scripts/quick-start.sh setup development
+# 3. Reconstruir imágenes
+docker-compose build --no-cache
+
+# 4. Levantar servicios
+docker-compose --profile development up -d
 ```
 
-### Migración de Configuración
+### Backup de Configuración
 
 ```bash
-# Comparar configuraciones
-diff config/backup_config.yaml config/backup_config.yaml.template
-
-# Backup de configuración actual
+# Hacer backup de configuración antes de actualizar
 cp config/backup_config.yaml config/backup_config.yaml.backup
+
+# Comparar con template después de actualizar
+diff config/backup_config.yaml config/backup_config.yaml.template
 ```
 
-## 🆘 Soporte
+## 🆘 Comandos de Referencia Rápida
 
-### Flujo de Trabajo de Diagnóstico
+### Gestión Básica
+```bash
+# Desarrollo
+docker-compose --profile development up -d      # Levantar
+docker-compose --profile development down       # Parar
+docker-compose --profile development logs -f    # Ver logs
 
-1. **Verificar estado**:
-   ```bash
-   ./scripts/quick-start.sh status development
-   ```
+# Producción
+docker-compose --profile production up -d       # Levantar
+docker-compose --profile production down        # Parar
+docker-compose --profile production logs -f     # Ver logs
+```
 
-2. **Validar configuración**:
-   ```bash
-   ./scripts/quick-start.sh validate
-   ```
+### Operaciones de Backup
+```bash
+# Ejecutar backup
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --config /config
 
-3. **Ver logs**:
-   ```bash
-   ./scripts/quick-start.sh logs development
-   ```
+# Validar configuración
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev python main.py --validate-only
 
-4. **Acceder al contenedor**:
-   ```bash
-   ./scripts/quick-start.sh shell development
-   ```
+# Acceder al contenedor
+docker-compose --profile development exec sysadmintoolkit-backup-service-dev bash
+```
 
-5. **Limpiar si es necesario**:
-   ```bash
-   ./scripts/quick-start.sh cleanup
-   ./scripts/quick-start.sh setup development
-   ```
+### Mantenimiento
+```bash
+# Limpiar todo
+docker-compose down -v
+docker system prune -f
+docker network rm influxdb-network
+
+# Reconstruir desde cero
+docker-compose build --no-cache
+docker network create influxdb-network
+docker-compose --profile development up -d
+```
 
 ### Recursos Adicionales
 
-- **Testing**: `python test/run_tests.py`
+- **Testing**: `docker-compose --profile development exec sysadmintoolkit-backup-service-dev python test/run_tests.py`
 - **Documentación**: `docs/`
 - **Logs**: `volumes/backup_logs/`
 - **Configuración**: `config/backup_config.yaml.template`
 
 ---
 
-**El sistema está diseñado para ser robusto, escalable y fácil de mantener. Con el gestor automático `quick-start.sh` tendrás un sistema de backup profesional funcionando en minutos.**
+**Sistema de backup robusto y escalable usando comandos Docker estándar. Perfecto para integración en pipelines CI/CD y automatización.**

@@ -119,4 +119,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python main.py --validate-only || exit 1
 
 # Comando por defecto para producción
-CMD ["python", "main.py", "--config", "/config"]
+CMD ["python", "main.py", "--config", "/app/config"]
