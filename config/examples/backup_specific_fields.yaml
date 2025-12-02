@@ -1,0 +1,61 @@
+source:
+  url: http://iot-influx:8086
+  databases:
+    - name: sensors
+      destination: sensors_archive
+  prefix: ""
+  suffix: "_arch"
+  user: "iot_user"
+  password: "iot_pass"
+  group_by: "30s"
+
+destination:
+  url: http://analytics-influx:8086
+  user: "analytics"
+  password: "analytics_pass"
+
+measurements:
+  include: null
+  exclude: null
+  specific:
+    sensor_station:
+      fields:
+        include: [temperature, humidity, pressure, wind_speed, wind_direction, precipitation, solar_radiation, uv_index]
+        exclude: []
+        types: [numeric]
+    weather_data:
+      fields:
+        include: [temperature_2m, humidity_relative, wind_speed_10m]
+        exclude: []
+        types: [numeric, string, boolean]
+
+options:
+  backup_mode: incremental
+  range:
+    start_date: ""
+    end_date: ""
+  incremental:
+    schedule: "*/15 * * * *"
+  timeout_client: 25
+  retries: 3
+  retry_delay: 5
+  initial_connection_retry_delay: 90
+  days_of_pagination: 30
+  parallel_workers: 8
+  field_obsolete_threshold: "90d"
+
+logging:
+  log_directory: /var/log/backup_influxdb/
+  log_rotation:
+    enabled: true
+    when: 'H'
+    interval: 6
+    backup_count: 10
+  loki:
+    enabled: false
+    url: "http://backup-loki:3100"
+    port: 3100
+    tags:
+      app: "backup-influxdb"
+      config: "backup_specific_fields.yaml"
+  log_level: INFO

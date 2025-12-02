@@ -1,0 +1,52 @@
+source:
+  url: http://corp-influx:8086
+  databases:
+    - name: monitoring
+      destination: monitoring_backup
+  prefix: "prod_"
+  suffix: "_v1"
+  user: "monitor"
+  password: "s3cret"
+  group_by: "5m"
+
+destination:
+  url: http://backup-dr:8086
+  user: "backup_user"
+  password: "backup_pass"
+
+measurements:
+  include: [cpu, mem, disk, net]
+  exclude: null
+  specific: {}
+
+options:
+  backup_mode: incremental
+  range:
+    start_date: ""
+    end_date: ""
+  incremental:
+    schedule: "0 */6 * * *"
+  timeout_client: 30
+  retries: 5
+  retry_delay: 10
+  initial_connection_retry_delay: 120
+  days_of_pagination: 7
+  parallel_workers: 4
+  field_obsolete_threshold: "1y"
+
+logging:
+  log_directory: /var/log/backup_influxdb/
+  log_rotation:
+    enabled: true
+    when: 'D'
+    interval: 1
+    backup_count: 14
+  loki:
+    enabled: true
+    url: "http://loki:3100"
+    port: 3100
+    tags:
+      app: "backup-influxdb"
+      config: "backup_filters.yaml"
+      env: "prod"
+  log_level: INFO

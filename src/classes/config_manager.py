@@ -1,15 +1,13 @@
 """
-Clase encargada de la gestion de la configuracion del sistema para un servicio
-con un archivo de configuracion en formato YAML.
-
-Esta clase comienza con un logger basico, luego carga toda la configuracion
-pertinente y finalmente expone los datos de configuracion a traves de atributos
-de la clase para que se pueda acceder a ellos desde cualquier parte del codigo.
+Gestiona la configuracion del sistema leyendo un YAML.
+Incluye autodeteccion de bases de datos cuando el listado queda vacio.
 """
 
 import os
 from typing import Any, Dict
+from urllib.parse import urlparse
 
+from influxdb import InfluxDBClient as NativeInfluxDBClient
 import yaml
 
 from src.exceptions import ConfigManagerError
@@ -38,6 +36,9 @@ class ConfigManager:
 
         # Cargar configuracion
         self._load_config()
+
+        # Autodescubrimiento de bases de datos si se dejo la lista vacia
+        self._discover_databases()
 
         # Validar la configuracion del archivo de configuracion YAML
         SourceConfig(**self.get_source_config())
@@ -74,6 +75,71 @@ class ConfigManager:
             error_msg = f"Error loading config from {self._config_file}: {e}"
             self._logger.critical(error_msg)
             raise ConfigManagerError(error_msg)
+
+    def _discover_databases(self) -> None:
+        """
+        Si la lista de 'databases' esta vacia se intenta descubrir todas las
+        bases de datos del servidor origen y se rellenan con el nombre de
+        destino aplicando prefix/suffix.
+        """
+        source_cfg = self._config.get("source") or {}
+        databases = source_cfg.get("databases")
+        if databases:
+            return  # Ya hay bases definidas
+
+        url = source_cfg.get("url")
+        if not url:
+            raise ConfigManagerError(
+                "No se puede autodetectar bases de datos: falta 'url' en 'source'."
+            )
+
+        parsed = urlparse(url)
+        if not parsed.hostname or not parsed.port:
+            raise ConfigManagerError(
+                f"No se puede autodetectar bases de datos: URL invalida '{url}'."
+            )
+
+        prefix = source_cfg.get("prefix") or ""
+        suffix = source_cfg.get("suffix") or ""
+
+        self._logger.info(
+            "Autodetectando bases de datos desde %s:%s", parsed.hostname, parsed.port
+        )
+
+        try:
+            client = NativeInfluxDBClient(
+                host=parsed.hostname,
+                port=parsed.port,
+                username=source_cfg.get("user") or None,
+                password=source_cfg.get("password") or None,
+                ssl=parsed.scheme == "https",
+            )
+            db_list = client.get_list_database()
+        except Exception as e:
+            raise ConfigManagerError(
+                f"No se pudieron obtener las bases de datos desde '{url}': {e}"
+            ) from e
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+        filtered = [db for db in db_list if db.get("name") and db["name"] != "_internal"]
+        if not filtered:
+            raise ConfigManagerError(
+                "Autodeteccion no retorno bases de datos (se excluye '_internal')."
+            )
+
+        discovered = [
+            {"name": db["name"], "destination": f"{prefix}{db['name']}{suffix}"}
+            for db in filtered
+        ]
+        self._config["source"]["databases"] = discovered
+        self._logger.info(
+            "Autodeteccion completada, %s bases de datos configuradas.",
+            len(discovered),
+        )
 
     def get_config(self) -> dict:
         """

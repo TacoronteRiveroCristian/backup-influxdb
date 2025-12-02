@@ -1,7 +1,10 @@
+.venv
 volumes/**/data/
 config/*.yaml
 *.log
 *.logs
+__pycache__/
+*.py[cod]
 
 # Archivos de testing y coverage (no deben generarse en raíz)
 # Todos los resultados deben ir a test/test_result/

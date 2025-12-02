@@ -1,0 +1,53 @@
+source:
+  url: http://source-influxdb:8086
+  databases:
+    - name: production_metrics
+      destination: production_metrics_backup
+    - name: app_events
+      destination: app_events_backup
+  prefix: "bk_"
+  suffix: ""
+  user: ""
+  password: ""
+  group_by: "1m"
+
+destination:
+  url: http://destination-influxdb:8086
+  user: ""
+  password: ""
+
+measurements:
+  include: null
+  exclude: null
+  specific: {}
+
+options:
+  backup_mode: incremental
+  range:
+    start_date: ""
+    end_date: ""
+  incremental:
+    schedule: "0 * * * *"
+  timeout_client: 20
+  retries: 3
+  retry_delay: 5
+  initial_connection_retry_delay: 60
+  days_of_pagination: 7
+  parallel_workers: 2
+  field_obsolete_threshold: "6M"
+
+logging:
+  log_directory: /var/log/backup_influxdb/
+  log_rotation:
+    enabled: true
+    when: 'D'
+    interval: 1
+    backup_count: 7
+  loki:
+    enabled: false
+    url: "http://backup-loki:3100"
+    port: 3100
+    tags:
+      app: "backup-influxdb"
+      config: "backup_basic.yaml"
+  log_level: INFO

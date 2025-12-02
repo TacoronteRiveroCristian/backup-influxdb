@@ -24,13 +24,11 @@ def _validate_url(url: AnyUrl) -> AnyUrl:
     if not url:
         raise PydanticCustomError("url_empty", "La URL no puede ser vacia")
 
-    # Comprobar que se especifica puerto de forma explicita
-    pattern = r"(:\d+\/)$"
-    match = re.search(pattern, str(url))
-    if not match:
+    # Comprobar que se especifica puerto de forma explicita (slash final opcional)
+    if url.port is None:
         raise PydanticCustomError(
             "url_missing_port",
-            "La URL '{url}' debe contener un puerto de servicio explicito (ej: http://localhost:8086/)",
+            "La URL '{url}' debe contener un puerto de servicio explicito (ej: http://localhost:8086).",
             {"url": str(url)},
         )
 
@@ -68,7 +66,7 @@ class SourceConfig(BaseModel):
 
     url: AnyUrl = Field(description="URL del servidor de origen")
     databases: list[Dict[str, str]] = Field(
-        description="Lista de bases de datos a procesar. No puede estar vacia."
+        description="Lista de bases de datos a procesar. Si se deja vacia se intentara autodetectar."
     )
     prefix: Optional[str] = Field(
         default=None, description="Prefijo de la medicion"
@@ -99,14 +97,23 @@ class SourceConfig(BaseModel):
         cls, data: List[Dict[str, str]]
     ) -> List[Dict[str, str]]:
         """
-        Valida que al menos haya una base de datos a procesar y que no haya
-        valores vacios.
+        Valida que la estructura de cada base de datos sea correcta.
+        La lista puede estar vacia para habilitar autodeteccion.
         """
+        if data is None:
+            raise PydanticCustomError(
+                "source_config_missing_databases",
+                "El campo 'databases' es obligatorio en la configuracion 'source'.",
+            )
+
+        if len(data) == 0:
+            return data  # Se usara autodeteccion
+
         for d in data:
             if not d.get("name") or not d.get("destination"):
                 raise PydanticCustomError(
                     "source_config_missing_databases",
-                    "Al menos una base de datos debe ser procesada y no puede estar vacia.",
+                    "Las entradas de 'databases' no pueden tener 'name' o 'destination' vacios.",
                 )
         return data
 
@@ -117,6 +124,9 @@ class SourceConfig(BaseModel):
         """
         Valida que no existan valores duplicados en las claves name ni destination
         """
+        if not data:
+            return data
+
         names = set()
         destinations = set()
         for d in data:

@@ -30,23 +30,24 @@ source:
   # - Instancia local: http://localhost:8086
   # - Servidor remoto: http://ip-servidor:8086
   #
-  # Ejemplos de configuracion:
-  # url: http://production-influxdb:8086     # Servidor de produccion
-  # url: http://monitoring-influx:8086       # Servidor de monitoreo
+  # Ejemplos de configuracion (siempre con puerto; el slash final es opcional):
+  # url: http://production-influxdb:8086      # Servidor de produccion
+  # url: http://monitoring-influx:8086        # Servidor de monitoreo
   url: http://source-influxdb:8086
 
   # Configuracion de bases de datos
   # ===============================
-  # Opcion A: Backup de bases de datos especificas
-  # Define explicitamente las bases de datos a respaldar
+  # Opcion A: Backup de bases de datos especificas (define la lista)
   databases:
     - name: production_metrics    # Base de datos origen
       destination: metrics_backup # Base de datos destino
     - name: application_logs
       destination: logs_backup
 
-  # Opcion B: Backup automatico de todas las bases de datos
-  # Utiliza lista vacia para procesar todas las BD disponibles:
+  # Opcion B: Autodiscovery de todas las bases de datos
+  # Deja la lista vacia y el sistema consultara al Influx origen.
+  # Se excluye automaticamente la BD interna '_internal'.
+  # prefix/suffix se aplican al nombre destino descubierto.
   # databases: []
 
   # Convenciones de nomenclatura
@@ -95,10 +96,10 @@ destination:
   # Endpoint del servidor InfluxDB de destino (requerido)
   # Puede ser la misma instancia que el origen utilizando diferentes bases de datos
   #
-  # Ejemplos de configuracion:
-  # url: http://backup-server:8086           # Servidor dedicado para backups
-  # url: http://dr-influxdb:8086             # Servidor de disaster recovery
-  # url: http://archive-storage:8086         # Almacenamiento de archivo
+  # Ejemplos de configuracion (con puerto; slash final opcional):
+  # url: http://backup-server:8086            # Servidor dedicado para backups
+  # url: http://dr-influxdb:8086              # Servidor de disaster recovery
+  # url: http://archive-storage:8086          # Almacenamiento de archivo
   url: http://destination-influxdb:8086
 
   # Autenticacion para el servidor destino
@@ -111,12 +112,12 @@ destination:
 measurements:
   # Estrategia de inclusion (recomendada)
   # Procesa unicamente las mediciones especificadas
-  include: []
+  include: null          # Usa null para no filtrar; lista para filtrar
   # Ejemplo: include: [cpu_metrics, memory_stats, network_io, disk_usage]
 
   # Estrategia de exclusion
   # Procesa todas las mediciones excepto las especificadas
-  exclude: []
+  exclude: null          # Usa null para no filtrar; lista para excluir
   # Ejemplo: exclude: [debug_traces, temporary_logs, test_data]
   #
   # Nota: No utilizar include y exclude simultaneamente
@@ -125,8 +126,9 @@ measurements:
   # =======================================
   # Define el procesamiento detallado para mediciones individuales
   # Implementa la funcionalidad core de procesamiento field-by-field
-  # Para configuracion basica sin procesamiento especifico, utilizar lista vacia
-  specific: []
+  # Para configuracion basica sin procesamiento especifico, utilizar diccionario vacio.
+  # Formato: <nombre_medicion>: { fields: { include/exclude/types } }
+  specific: {}
     # Ejemplos de configuracion avanzada:
     #
     # Configuracion para metricas de CPU
@@ -319,7 +321,7 @@ logging:
   # Integracion con Loki (logging centralizado)
   loki:
     enabled: false
-    url: "backup-loki"
+    url: "http://backup-loki:3100"  # URL completa con puerto; slash final opcional
     port: 3100
     # Tags para identificacion unica de configuraciones. Se pueden agregar
     # tantos tags como se desee

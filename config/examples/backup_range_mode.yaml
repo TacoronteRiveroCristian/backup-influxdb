@@ -1,0 +1,52 @@
+source:
+  url: http://historic-influx:8086
+  databases:
+    - name: legacy_metrics
+      destination: legacy_metrics_backup
+  prefix: "hist_"
+  suffix: ""
+  user: ""
+  password: ""
+  group_by: "1h"
+
+destination:
+  url: http://archive-influx:8086
+  user: "archive"
+  password: "archive_pass"
+
+measurements:
+  include: null
+  exclude: [debug_traces, temp_logs]
+  specific: {}
+
+options:
+  backup_mode: range
+  range:
+    start_date: "2023-01-01T00:00:00Z"
+    end_date: "2023-12-31T23:59:59Z"
+  incremental:
+    schedule: ""
+  timeout_client: 40
+  retries: 3
+  retry_delay: 10
+  initial_connection_retry_delay: 60
+  days_of_pagination: 30
+  parallel_workers: 3
+  field_obsolete_threshold: "2y"
+
+logging:
+  log_directory: /var/log/backup_influxdb/
+  log_rotation:
+    enabled: true
+    when: 'D'
+    interval: 1
+    backup_count: 30
+  loki:
+    enabled: true
+    url: "http://loki:3100"
+    port: 3100
+    tags:
+      app: "backup-influxdb"
+      config: "backup_range_mode.yaml"
+      env: "archive"
+  log_level: INFO
