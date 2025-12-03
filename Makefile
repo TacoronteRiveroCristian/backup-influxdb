@@ -31,3 +31,7 @@ gen-data:
 .PHONY: down
 down:
 	@docker compose --profile $(PROFILE) down
+
+.PHONY: backup-run
+backup-run:
+	@docker compose --profile $(PROFILE) up -d influxdb-source influxdb-dest backup-runner

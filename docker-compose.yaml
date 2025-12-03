@@ -54,6 +54,28 @@ services:
     networks:
       - backup-network
 
+  backup-runner:
+    image: python:3.11-slim
+    container_name: backup-runner
+    depends_on:
+      - influxdb-source
+      - influxdb-dest
+    volumes:
+      - ./:/app
+      - ./config:/config
+      - ./volumes/backup_logs:/var/log/backup_influxdb
+    working_dir: /app
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "pip install --no-cache-dir influxdb PyYAML pydantic faker apscheduler &&
+             python scripts/backup_runner.py --config /config --state /var/log/backup_influxdb/state.json"
+    profiles:
+      - development
+      - production
+    networks:
+      - backup-network
+
 networks:
   backup-network:
     driver: bridge
