@@ -1,112 +1,59 @@
-### Shared configuration for all services backup ###
-x-backup-service: &backup-service
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      - GIT_USER_NAME=${GIT_USER_NAME:-Developer}
-      - GIT_USER_EMAIL=${GIT_USER_EMAIL:-dev@example.com}
-      - GIT_DEFAULT_BRANCH=${GIT_DEFAULT_BRANCH:-main}
-      - GIT_TOKEN=${GIT_TOKEN}
-  volumes:
-    - ./volumes/backup_logs:/var/log/backup_influxdb
-    - ./config:/app/config
-  networks:
-    - backup-network
-  environment:
-    - PYTHONPATH=/app
-
-### Services ###
 services:
-  backup-influxdb: # InfluxDB server for development/testing
+  influxdb-source:
     image: influxdb:1.8
-    container_name: backup-influxdb
+    container_name: influxdb-source
     ports:
-      - "8086:8086"
+      - "18086:8086"  # Puerto externo para validar origen
     environment:
-      - INFLUXDB_DB=metrics
+      - INFLUXDB_DB=telemetry
       - INFLUXDB_HTTP_AUTH_ENABLED=false
     volumes:
-      - ./volumes/influxdb/data:/var/lib/influxdb
+      - ./volumes/influxdb-source/data:/var/lib/influxdb
     profiles:
       - development
     networks:
       - backup-network
 
-  backup-loki:
-    image: grafana/loki
-    container_name: backup-loki
-    user: "root"
+  influxdb-dest:
+    image: influxdb:1.8
+    container_name: influxdb-dest
     ports:
-      - "3100:3100"
-    volumes:
-      - ./volumes/loki/config.yaml:/etc/loki/local-config.yaml
-      - ./volumes/loki/data:/var/lib/loki
+      - "19086:8086"  # Puerto externo para validar destino
     environment:
-      - LOKI_PORT=3100
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
-    networks:
-      - backup-network
-
-  backup-grafana: # Grafana server for development/testing
-    image: grafana/grafana:latest
-    container_name: backup-grafana
-    ports:
-      - "3000:3000"
+      - INFLUXDB_DB=telemetry
+      - INFLUXDB_HTTP_AUTH_ENABLED=false
     volumes:
-      - ./volumes/grafana/data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_HTTP_PORT=3000
+      - ./volumes/influxdb-dest/data:/var/lib/influxdb
     profiles:
       - development
     networks:
       - backup-network
 
-  backup-service-dev: # Backup service for development
-    container_name: backup-service-dev
-    <<: *backup-service
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: development  # Usar el stage de development
-      args:
-        - GIT_USER_NAME=${GIT_USER_NAME:-Developer}
-        - GIT_USER_EMAIL=${GIT_USER_EMAIL:-dev@example.com}
-        - GIT_DEFAULT_BRANCH=${GIT_DEFAULT_BRANCH:-main}
+  data-generator:
+    image: python:3.11-slim
+    container_name: data-generator
+    depends_on:
+      - influxdb-source
     volumes:
-      - ./:/app/  # Montar todo el proyecto para desarrollo
-      - ./volumes/backup_logs:/var/log/backup_influxdb # Path de ficheros .logs configurados en .config/*.yaml
-      - /var/run/docker.sock:/var/run/docker.sock  # Acceso a Docker desde dentro del contenedor
+      - ./:/app
+    working_dir: /app
     environment:
-      - PYTHONPATH=/app
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - DEVELOPMENT=true
-      - GIT_TOKEN=${GIT_TOKEN}
+      - INFLUX_HOST=influxdb-source
+      - INFLUX_PORT=8086
+      - INFLUX_DB=telemetry
+      - GENERATOR_BACKFILL_DAYS=7
+      - GENERATOR_REALTIME_BATCH=25
+      - LOG_LEVEL=INFO
+      - LOG_HEARTBEAT_SEC=10
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "pip install --no-cache-dir influxdb faker &&
+             python scripts/data_generator.py"
     profiles:
       - development
-    # El stage development ya tiene sleep infinity como default
-    # Permitir capabilities para desarrollo y acceso a Docker
-    cap_add:
-      - SYS_PTRACE
-    privileged: true  # Necesario para acceso completo a Docker
+    networks:
+      - backup-network
 
-  backup-service-prod: # Backup service for production
-    container_name: backup-service-prod
-    <<: *backup-service
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production  # Usar el stage de production (imagen mínima)
-    profiles:
-      - production
-    restart: unless-stopped
-    # El stage production ya tiene el comando correcto como default
-
-### Networks ###
 networks:
   backup-network:
     driver: bridge
